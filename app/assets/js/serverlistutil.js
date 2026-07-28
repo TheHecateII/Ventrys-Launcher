@@ -67,8 +67,8 @@ function buildServersDatPayload(serverName, serverAddress) {
 }
 
 /**
- * Ensure the instance servers.dat exists and matches the expected server entry.
- * Rewrites the file when missing, invalid, or out of date.
+ * Ensure a usable servers.dat exists for first launch.
+ * Never overwrite a valid existing file — Minecraft owns the multiplayer list after that.
  *
  * @param {string} instanceDir Absolute path to the server instance directory.
  * @param {string} serverName Display name shown in the multiplayer list.
@@ -76,11 +76,20 @@ function buildServersDatPayload(serverName, serverAddress) {
  */
 function ensureDefaultServerList(instanceDir, serverName, serverAddress) {
     const serversDatPath = path.join(instanceDir, 'servers.dat')
-    const payload = buildServersDatPayload(serverName, serverAddress)
-    const expected = zlib.gzipSync(payload)
-
     fs.ensureDirSync(instanceDir)
-    fs.writeFileSync(serversDatPath, expected)
+
+    if(fs.existsSync(serversDatPath)) {
+        try {
+            zlib.gunzipSync(fs.readFileSync(serversDatPath))
+            logger.info(`Keeping existing multiplayer server list at ${serversDatPath}`)
+            return
+        } catch (err) {
+            logger.warn(`Existing servers.dat is invalid, recreating default entry.`, err)
+        }
+    }
+
+    const payload = buildServersDatPayload(serverName, serverAddress)
+    fs.writeFileSync(serversDatPath, zlib.gzipSync(payload))
     logger.info(`Prepared multiplayer server list at ${serversDatPath}`)
 }
 

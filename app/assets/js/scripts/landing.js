@@ -318,12 +318,12 @@ async function asyncSystemScan(effectiveJavaOptions, launchAfter = true){
             Lang.queryJS('landing.systemScan.installJava'),
             Lang.queryJS('landing.systemScan.installJavaManually')
         )
-        setOverlayHandler(() => {
+        setOverlayHandler(async () => {
             setLaunchDetails(Lang.queryJS('landing.systemScan.javaDownloadPrepare'))
             toggleOverlay(false)
-            
+
             try {
-                downloadJava(effectiveJavaOptions, launchAfter)
+                await downloadJava(effectiveJavaOptions, launchAfter)
             } catch(err) {
                 loggerLanding.error('Unhandled error in Java Download', err)
                 showLaunchFailure(Lang.queryJS('landing.systemScan.javaDownloadFailureTitle'), Lang.queryJS('landing.systemScan.javaDownloadFailureText'))
@@ -372,9 +372,6 @@ async function asyncSystemScan(effectiveJavaOptions, launchAfter = true){
 }
 
 async function downloadJava(effectiveJavaOptions, launchAfter = true) {
-
-    // TODO Error handling.
-    // asset can be null.
     const asset = await latestOpenJDK(
         effectiveJavaOptions.suggestedMajor,
         ConfigManager.getDataDirectory(),
@@ -394,17 +391,13 @@ async function downloadJava(effectiveJavaOptions, launchAfter = true) {
     if(received != asset.size) {
         loggerLanding.warn(`Java Download: Expected ${asset.size} bytes but received ${received}`)
         if(!await validateLocalFile(asset.path, asset.algo, asset.hash)) {
-            log.error(`Hashes do not match, ${asset.id} may be corrupted.`)
-            // Don't know how this could happen, but report it.
+            loggerLanding.error(`Hashes do not match, ${asset.id} may be corrupted.`)
             throw new Error(Lang.queryJS('landing.downloadJava.javaDownloadCorruptedError'))
         }
     }
 
-    // Extract
-    // Show installing progress bar.
     remote.getCurrentWindow().setProgressBar(2)
 
-    // Wait for extration to complete.
     const eLStr = Lang.queryJS('landing.downloadJava.extractingJava')
     let dotStr = ''
     setLaunchDetails(eLStr)
@@ -417,22 +410,16 @@ async function downloadJava(effectiveJavaOptions, launchAfter = true) {
         setLaunchDetails(eLStr + dotStr)
     }, 750)
 
-    const newJavaExec = await extractJdk(asset.path)
-
-    // Extraction complete, remove the loading from the OS progress bar.
-    remote.getCurrentWindow().setProgressBar(-1)
-
-    // Extraction completed successfully.
-    ConfigManager.setJavaExecutable(ConfigManager.getSelectedServer(), newJavaExec)
-    ConfigManager.save()
-
-    clearInterval(extractListener)
-    setLaunchDetails(Lang.queryJS('landing.downloadJava.javaInstalled'))
-
-    // TODO Callback hell
-    // Refactor the launch functions
-    asyncSystemScan(effectiveJavaOptions, launchAfter)
-
+    try {
+        const newJavaExec = await extractJdk(asset.path)
+        ConfigManager.setJavaExecutable(ConfigManager.getSelectedServer(), newJavaExec)
+        ConfigManager.save()
+        setLaunchDetails(Lang.queryJS('landing.downloadJava.javaInstalled'))
+        await asyncSystemScan(effectiveJavaOptions, launchAfter)
+    } finally {
+        clearInterval(extractListener)
+        remote.getCurrentWindow().setProgressBar(-1)
+    }
 }
 
 // Keep reference to Minecraft Process

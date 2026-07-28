@@ -22,6 +22,11 @@
       },
       "mainServer": true,
       "autoconnect": false,
+      "javaOptions": {
+        "supported": "17.x",
+        "suggestedMajor": 17,
+        "distribution": "temurin"
+      },
       "modules": [
         {
           "id": "net.minecraftforge:lowcodelanguage:1.18.2-40.2.21",
@@ -666,6 +671,26 @@
           }
         },
         {
+          "id": "radimous.spark_1_18_client_fix:spark_1_18_client_fix:1.0@jar",
+          "name": "Spark 1.18 Client Fix",
+          "type": "ForgeMod",
+          "artifact": {
+            "size": 4908,
+            "url": "http://ventysgot.merryhost.fr:25570/servers/Ventrys-Server-1.18.2/forgemods/required/spark_1_18_client_fix-1.0.jar",
+            "MD5": "d99c1ee9806763baeee5c4bcefa80a53"
+          }
+        },
+        {
+          "id": "me.lucko:spark:1.10.38@jar",
+          "name": "Spark",
+          "type": "ForgeMod",
+          "artifact": {
+            "size": 2976453,
+            "url": "http://ventysgot.merryhost.fr:25570/servers/Ventrys-Server-1.18.2/forgemods/required/spark-1.10.38-forge(1).jar",
+            "MD5": "acbab5df7c342abd4df6357349f70664"
+          }
+        },
+        {
           "id": "me.flashyreese.mods.reeses_sodium_options:textrues_embeddium_options:0.1.1+mc1.18.2@jar",
           "name": "TexTrue's Embeddium Options",
           "type": "ForgeMod",
@@ -680,9 +705,9 @@
           "name": "VentrysChat - Chat RP",
           "type": "ForgeMod",
           "artifact": {
-            "size": 5610940,
+            "size": 5643850,
             "url": "http://ventysgot.merryhost.fr:25570/servers/Ventrys-Server-1.18.2/forgemods/required/VentrysChat.jar",
-            "MD5": "19f9b65529cf6a6ef671b5fe3036d378"
+            "MD5": "3b2f2fb50969c8116e661efc1e67871b"
           }
         },
         {
@@ -690,9 +715,9 @@
           "name": "Ventrys Combat - Système d'Armes Complet",
           "type": "ForgeMod",
           "artifact": {
-            "size": 520426,
+            "size": 520428,
             "url": "http://ventysgot.merryhost.fr:25570/servers/Ventrys-Server-1.18.2/forgemods/required/VentrysCombat.jar",
-            "MD5": "55cb8ba7aaad609986d7bdf1984fc420"
+            "MD5": "bf877f07e1c953c54f7dfe4957601255"
           }
         },
         {
@@ -700,9 +725,9 @@
           "name": "Ventrys_Blocs",
           "type": "ForgeMod",
           "artifact": {
-            "size": 904053,
+            "size": 904052,
             "url": "http://ventysgot.merryhost.fr:25570/servers/Ventrys-Server-1.18.2/forgemods/required/VentrysDeco.jar",
-            "MD5": "e9e2b8f9118f47036d8b60dd58c1d4d2"
+            "MD5": "05f7f865ebfa32d99030a8193a962d21"
           }
         },
         {
@@ -710,9 +735,9 @@
           "name": "VentrysHD Skin MOD",
           "type": "ForgeMod",
           "artifact": {
-            "size": 471732,
+            "size": 1469809,
             "url": "http://ventysgot.merryhost.fr:25570/servers/Ventrys-Server-1.18.2/forgemods/required/VentrysHD.jar",
-            "MD5": "f9d13275d53848df48ff87099ad4e6ca"
+            "MD5": "ed3c0ea7298ad5635448a4cf92cca3c9"
           }
         },
         {
@@ -720,9 +745,9 @@
           "name": "VentrysJob",
           "type": "ForgeMod",
           "artifact": {
-            "size": 2688377,
-            "url": "http://ventysgot.merryhost.fr:25570/servers/Ventrys-Server-1.18.2/forgemods/required/ventrysjob.jar",
-            "MD5": "ab5d9f5c85bd57047d4721d94347c564"
+            "size": 2783096,
+            "url": "http://ventysgot.merryhost.fr:25570/servers/Ventrys-Server-1.18.2/forgemods/required/VentrysJob.jar",
+            "MD5": "8d4133af1deca9c727e030d5dc0e6b57"
           }
         },
         {
@@ -730,9 +755,9 @@
           "name": "Ventrys_mob",
           "type": "ForgeMod",
           "artifact": {
-            "size": 8999104,
+            "size": 9009258,
             "url": "http://ventysgot.merryhost.fr:25570/servers/Ventrys-Server-1.18.2/forgemods/required/VentrysMobs.jar",
-            "MD5": "07b518c138d7a1a11eb1edf069c93752"
+            "MD5": "8df2eea83e681c7cd89ad5364ffc6d76"
           }
         },
         {
@@ -740,9 +765,9 @@
           "name": "Ventrys Permissions",
           "type": "ForgeMod",
           "artifact": {
-            "size": 130220,
+            "size": 132917,
             "url": "http://ventysgot.merryhost.fr:25570/servers/Ventrys-Server-1.18.2/forgemods/required/VentrysPermissions.jar",
-            "MD5": "3d7ec20b3f1e44baef7549e32311efe2"
+            "MD5": "2153ea665fde0631dfe158428ec951ad"
           }
         },
         {
@@ -750,9 +775,9 @@
           "name": "VentrysSurvival",
           "type": "ForgeMod",
           "artifact": {
-            "size": 2503784,
+            "size": 988503,
             "url": "http://ventysgot.merryhost.fr:25570/servers/Ventrys-Server-1.18.2/forgemods/required/VentrysSurvival.jar",
-            "MD5": "d808a3ab6862ce88ea2c0beea3ccefaf"
+            "MD5": "3aa162355371f2aedb2b20419a840c5c"
           }
         },
         {
@@ -803,7 +828,7 @@
           "name": "options.txt",
           "type": "File",
           "artifact": {
-            "size": 509,
+            "size": 528,
             "url": "http://ventysgot.merryhost.fr:25570/servers/Ventrys-Server-1.18.2/files/options.txt",
             "path": "options.txt"
           }
@@ -827,26 +852,6 @@
             "url": "http://ventysgot.merryhost.fr:25570/servers/Ventrys-Server-1.18.2/files/resourcepacks/Ventrys_pack.zip",
             "MD5": "597ba6c8f56d4b00efa0bde860639a8a",
             "path": "resourcepacks/Ventrys_pack.zip"
-          }
-        },
-        {
-          "id": "servers.dat",
-          "name": "servers.dat",
-          "type": "File",
-          "artifact": {
-            "size": 111,
-            "url": "http://ventysgot.merryhost.fr:25570/servers/Ventrys-Server-1.18.2/files/servers.dat",
-            "path": "servers.dat"
-          }
-        },
-        {
-          "id": "servers_uncompressed.dat",
-          "name": "servers_uncompressed.dat",
-          "type": "File",
-          "artifact": {
-            "size": 92,
-            "url": "http://ventysgot.merryhost.fr:25570/servers/Ventrys-Server-1.18.2/files/servers_uncompressed.dat",
-            "path": "servers_uncompressed.dat"
           }
         },
         {
