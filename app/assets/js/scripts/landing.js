@@ -616,21 +616,19 @@ async function dlAsync(login = true) {
             }
         }
 
-        const scheduleServerListWrite = () => {
+        const seedServerListIfNeeded = () => {
             const serverAddress = serv.hostname && serv.port
                 ? `${serv.hostname}:${serv.port}`
                 : (serv.rawServer.address || '')
-            setImmediate(() => {
-                try {
-                    ensureDefaultServerList(
-                        ConfigManager.getServerInstanceDirectory(serv.rawServer.id),
-                        serv.rawServer.name,
-                        serverAddress
-                    )
-                } catch (err) {
-                    loggerLaunchSuite.warn('Unable to prepare servers.dat after launch.', err)
-                }
-            })
+            try {
+                ensureDefaultServerList(
+                    ConfigManager.getServerInstanceDirectory(serv.rawServer.id),
+                    serv.rawServer.name,
+                    serverAddress
+                )
+            } catch (err) {
+                loggerLaunchSuite.warn('Unable to prepare servers.dat before launch.', err)
+            }
         }
 
         // Attach a temporary listener to the client output.
@@ -662,6 +660,9 @@ async function dlAsync(login = true) {
         }
 
         try {
+            // Seed multiplayer list before Java starts so Minecraft reads a stable file.
+            seedServerListIfNeeded()
+
             // Build Minecraft process.
             proc = pb.build()
 
@@ -670,7 +671,6 @@ async function dlAsync(login = true) {
             }
 
             loggerLaunchSuite.info(`Minecraft process started (pid ${proc.pid}).`)
-            scheduleServerListWrite()
 
             // Bind listeners to stdout/stderr for Discord and error detection.
             proc.stdout.on('data', tempListener)

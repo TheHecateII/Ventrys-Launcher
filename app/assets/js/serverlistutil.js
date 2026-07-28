@@ -18,7 +18,8 @@ function sizeUtf(value) {
 }
 
 /**
- * Build a Minecraft 1.18.2-compatible servers.dat payload (uncompressed NBT).
+ * Build a Minecraft-compatible servers.dat payload (uncompressed NBT).
+ * Minecraft always reads/writes servers.dat without gzip.
  *
  * @param {string} serverName Display name shown in the multiplayer list.
  * @param {string} serverAddress Hostname with optional port (host:port).
@@ -67,6 +68,31 @@ function buildServersDatPayload(serverName, serverAddress) {
 }
 
 /**
+ * True if the buffer is a usable servers.dat (uncompressed NBT, or legacy gzip).
+ *
+ * @param {Buffer} buf
+ * @returns {boolean}
+ */
+function isUsableServersDat(buf) {
+    if(!buf || buf.length < 3) {
+        return false
+    }
+
+    // Minecraft format: uncompressed root TAG_Compound (0x0A).
+    if(buf[0] === 10) {
+        return true
+    }
+
+    // Older launcher builds wrote gzip-compressed NBT — still keep those.
+    try {
+        const unzipped = zlib.gunzipSync(buf)
+        return unzipped.length > 0 && unzipped[0] === 10
+    } catch (err) {
+        return false
+    }
+}
+
+/**
  * Ensure a usable servers.dat exists for first launch.
  * Never overwrite a valid existing file — Minecraft owns the multiplayer list after that.
  *
@@ -79,21 +105,20 @@ function ensureDefaultServerList(instanceDir, serverName, serverAddress) {
     fs.ensureDirSync(instanceDir)
 
     if(fs.existsSync(serversDatPath)) {
-        try {
-            zlib.gunzipSync(fs.readFileSync(serversDatPath))
+        const existing = fs.readFileSync(serversDatPath)
+        if(isUsableServersDat(existing)) {
             logger.info(`Keeping existing multiplayer server list at ${serversDatPath}`)
             return
-        } catch (err) {
-            logger.warn(`Existing servers.dat is invalid, recreating default entry.`, err)
         }
+        logger.warn(`Existing servers.dat is invalid, recreating default entry.`)
     }
 
-    const payload = buildServersDatPayload(serverName, serverAddress)
-    fs.writeFileSync(serversDatPath, zlib.gzipSync(payload))
+    fs.writeFileSync(serversDatPath, buildServersDatPayload(serverName, serverAddress))
     logger.info(`Prepared multiplayer server list at ${serversDatPath}`)
 }
 
 module.exports = {
     buildServersDatPayload,
-    ensureDefaultServerList
+    ensureDefaultServerList,
+    isUsableServersDat
 }
