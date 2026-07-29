@@ -751,6 +751,16 @@
           }
         },
         {
+          "id": "com.ventrys.letter:ventrysletter:1.0.0@jar",
+          "name": "VentrysLetter",
+          "type": "ForgeMod",
+          "artifact": {
+            "size": 1243221,
+            "url": "http://ventysgot.merryhost.fr:25570/servers/Ventrys-Server-1.18.2/forgemods/required/VentrysLetter.jar",
+            "MD5": "98c156028d4a8cb1abbfeec320e512da"
+          }
+        },
+        {
           "id": "net.mcreator.ventrysmob:ventrys_mob:1.0.0@jar",
           "name": "Ventrys_mob",
           "type": "ForgeMod",
