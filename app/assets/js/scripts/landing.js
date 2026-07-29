@@ -326,7 +326,10 @@ async function asyncSystemScan(effectiveJavaOptions, launchAfter = true){
                 await downloadJava(effectiveJavaOptions, launchAfter)
             } catch(err) {
                 loggerLanding.error('Unhandled error in Java Download', err)
-                showLaunchFailure(Lang.queryJS('landing.systemScan.javaDownloadFailureTitle'), Lang.queryJS('landing.systemScan.javaDownloadFailureText'))
+                showLaunchFailure(
+                    Lang.queryJS('landing.systemScan.javaDownloadFailureTitle'),
+                    err?.message || Lang.queryJS('landing.systemScan.javaDownloadFailureText')
+                )
             }
         })
         setDismissHandler(() => {
@@ -372,10 +375,16 @@ async function asyncSystemScan(effectiveJavaOptions, launchAfter = true){
 }
 
 async function downloadJava(effectiveJavaOptions, launchAfter = true) {
+    // Helios expects enum values like "TEMURIN" / "CORRETTO" (uppercase).
+    // Nebula / hand-edited distros often ship lowercase — normalize before lookup.
+    const preferredDistribution = typeof effectiveJavaOptions.distribution === 'string'
+        ? effectiveJavaOptions.distribution.toUpperCase()
+        : effectiveJavaOptions.distribution
+
     const asset = await latestOpenJDK(
         effectiveJavaOptions.suggestedMajor,
         ConfigManager.getDataDirectory(),
-        effectiveJavaOptions.distribution)
+        preferredDistribution)
 
     if(asset == null) {
         throw new Error(Lang.queryJS('landing.downloadJava.findJdkFailure'))
