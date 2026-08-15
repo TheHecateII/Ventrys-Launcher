@@ -526,22 +526,27 @@ async function dlAsync(login = true) {
     }
     
 
+    // Always call download(), even with nothing invalid - the receiver
+    // handles an empty asset list near-instantly, and this is also the only
+    // place postDownload() (Forge version.json + prunableDirectories orphan
+    // cleanup) gets called. Skipping it here previously meant orphan files
+    // were never cleaned up once a modpack was already fully up to date.
     if(invalidFileCount > 0) {
         loggerLaunchSuite.info('Downloading files.')
         setLaunchDetails(Lang.queryJS('landing.dlAsync.downloadingFiles'))
         setLaunchPercentage(0)
-        try {
-            await fullRepairModule.download(percent => {
-                setDownloadPercentage(percent)
-            })
-            setDownloadPercentage(100)
-        } catch(err) {
-            loggerLaunchSuite.error('Error during file download.')
-            showLaunchFailure(Lang.queryJS('landing.dlAsync.errorDuringFileDownloadTitle'), err.displayable || Lang.queryJS('landing.dlAsync.seeConsoleForDetails'))
-            return
-        }
     } else {
-        loggerLaunchSuite.info('No invalid files, skipping download.')
+        loggerLaunchSuite.info('No invalid files, running post-download steps only.')
+    }
+    try {
+        await fullRepairModule.download(percent => {
+            setDownloadPercentage(percent)
+        })
+        setDownloadPercentage(100)
+    } catch(err) {
+        loggerLaunchSuite.error('Error during file download.')
+        showLaunchFailure(Lang.queryJS('landing.dlAsync.errorDuringFileDownloadTitle'), err.displayable || Lang.queryJS('landing.dlAsync.seeConsoleForDetails'))
+        return
     }
 
     // Remove download bar.
