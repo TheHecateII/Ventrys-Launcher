@@ -1,8 +1,5 @@
-const remoteMain = require('@electron/remote/main')
-remoteMain.initialize()
-
 // Requirements
-const { app, BrowserWindow, ipcMain, Menu, shell } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, Menu, shell } = require('electron')
 const autoUpdater                       = require('electron-updater').autoUpdater
 const ejse                              = require('ejs-electron')
 const fs                                = require('fs')
@@ -111,6 +108,41 @@ ipcMain.handle(SHELL_OPCODE.TRASH_ITEM, async (event, ...args) => {
             error: error
         }
     }
+})
+
+// Window controls for the frameless custom titlebar (renderer used to reach
+// these via @electron/remote, which doesn't support modern Electron majors -
+// replaced with plain IPC, the currently recommended approach).
+ipcMain.on('window:close', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.close()
+})
+ipcMain.on('window:toggleMaximize', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if(win == null) return
+    if(win.isMaximized()) {
+        win.unmaximize()
+    } else {
+        win.maximize()
+    }
+})
+ipcMain.on('window:minimize', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.minimize()
+})
+ipcMain.on('window:toggleDevTools', (event) => {
+    BrowserWindow.fromWebContents(event.sender)?.toggleDevTools()
+})
+ipcMain.on('getUserDataPath', (event) => {
+    event.returnValue = app.getPath('userData')
+})
+ipcMain.on('window:setProgressBar', (event, value) => {
+    BrowserWindow.fromWebContents(event.sender)?.setProgressBar(value)
+})
+ipcMain.on('app:getVersion', (event) => {
+    event.returnValue = app.getVersion()
+})
+ipcMain.handle('dialog:showOpenDialog', (event, options) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return dialog.showOpenDialog(win, options)
 })
 
 // Disable hardware acceleration.
@@ -245,7 +277,9 @@ function createWindow() {
         },
         backgroundColor: '#171614'
     })
-    remoteMain.enable(win.webContents)
+    win.webContents.on('devtools-opened', () => {
+        win.webContents.send('devtools-opened')
+    })
 
     const data = {
         bkid: Math.floor((Math.random() * fs.readdirSync(path.join(__dirname, 'app', 'assets', 'images', 'backgrounds')).length)),

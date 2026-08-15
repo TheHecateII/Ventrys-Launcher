@@ -9,7 +9,10 @@ const sysRoot = process.env.APPDATA || (process.platform == 'darwin' ? process.e
 
 const dataPath = path.join(sysRoot, '.helioslauncher')
 
-const launcherDir = require('@electron/remote').app.getPath('userData')
+// Synchronous IPC to main - replaces the old @electron/remote call, which
+// doesn't support modern Electron majors. This module only ever runs in the
+// renderer/preload context (never required from index.js).
+const launcherDir = require('electron').ipcRenderer.sendSync('getUserDataPath')
 
 /**
  * Retrieve the absolute path of the launcher directory.

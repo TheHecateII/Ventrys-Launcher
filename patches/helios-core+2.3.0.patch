@@ -23,3 +23,88 @@ index 018620e..c434bb1 100644
                                                  }
                                                  // SUBKEY DONE
                                                  numDone++;
+diff --git a/node_modules/helios-core/dist/dl/distribution/DistributionIndexProcessor.js b/node_modules/helios-core/dist/dl/distribution/DistributionIndexProcessor.js
+index f09b6b4..268efb6 100644
+--- a/node_modules/helios-core/dist/dl/distribution/DistributionIndexProcessor.js
++++ b/node_modules/helios-core/dist/dl/distribution/DistributionIndexProcessor.js
+@@ -14,6 +14,7 @@ const MojangUtils_1 = require("../../common/util/MojangUtils");
+ const fs_extra_1 = require("fs-extra");
+ const node_stream_zip_1 = __importDefault(require("node-stream-zip"));
+ const path_1 = require("path");
++const fs_promises_1 = require("fs/promises");
+ class DistributionIndexProcessor extends IndexProcessor_1.IndexProcessor {
+     distribution;
+     serverId;
+@@ -43,6 +44,72 @@ class DistributionIndexProcessor extends IndexProcessor_1.IndexProcessor {
+     }
+     async postDownload() {
+         await this.loadModLoaderVersionJson();
++        await this.pruneOrphans();
++    }
++    // Ventrys patch: deletes local files that are no longer referenced by the
++    // distribution, but ONLY inside directories the server explicitly opted
++    // into via `prunableDirectories` on the Server object (set from
++    // servermeta.json's `prunableDirectories` by nebula-watch/Nebula). Never
++    // touches anything outside those explicitly whitelisted directories, so
++    // arbitrary config/ files created by other mods are never at risk.
++    async pruneOrphans() {
++        const server = this.distribution.getServerById(this.serverId);
++        if (server == null) {
++            return;
++        }
++        const prunableDirs = server.rawServer.prunableDirectories;
++        if (!Array.isArray(prunableDirs) || prunableDirs.length === 0) {
++            return;
++        }
++        // Anchor the instance directory off any known File-type module path,
++        // since HeliosModule doesn't expose instanceDir directly.
++        const anchor = server.modules.find((m) => m.rawModule.type === helios_distribution_types_1.Type.File
++            && typeof m.rawModule.artifact.path === 'string');
++        if (anchor == null) {
++            DistributionIndexProcessor.logger.warn('pruneOrphans: no File-type module to anchor against, skipping.');
++            return;
++        }
++        const relNative = anchor.rawModule.artifact.path.split('/').join(path_1.sep);
++        const absAnchor = anchor.getPath();
++        if (!absAnchor.endsWith(relNative)) {
++            DistributionIndexProcessor.logger.warn('pruneOrphans: anchor path mismatch, skipping for safety.');
++            return;
++        }
++        const instanceServerDir = absAnchor.slice(0, absAnchor.length - relNative.length);
++        const expected = new Set();
++        for (const m of server.modules) {
++            if (m.rawModule.type === helios_distribution_types_1.Type.File) {
++                expected.add(m.getPath());
++            }
++        }
++        for (const dir of prunableDirs) {
++            const targetDir = (0, path_1.join)(instanceServerDir, dir);
++            await this.pruneDirectory(targetDir, expected);
++        }
++    }
++    async pruneDirectory(dir, expected) {
++        let entries;
++        try {
++            entries = await fs_promises_1.readdir(dir, { withFileTypes: true });
++        }
++        catch {
++            return;
++        }
++        for (const entry of entries) {
++            const full = (0, path_1.join)(dir, entry.name);
++            if (entry.isDirectory()) {
++                await this.pruneDirectory(full, expected);
++            }
++            else if (!expected.has(full)) {
++                try {
++                    await (0, fs_extra_1.remove)(full);
++                    DistributionIndexProcessor.logger.info(`Pruned orphaned file: ${full}`);
++                }
++                catch (err) {
++                    DistributionIndexProcessor.logger.warn(`Failed to prune ${full}: ${err}`);
++                }
++            }
++        }
+     }
+     async validateModules(modules, accumulator) {
+         for (const module of modules) {

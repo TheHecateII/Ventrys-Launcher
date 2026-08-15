@@ -1623,5 +1623,6 @@ async function prepareSettings(first = false) {
 }
 
 // Save pending settings when the launcher window is closed.
-remote.getCurrentWindow().on('close', saveSettingsOnExit)
+// (remote.getCurrentWindow().on('close', ...) removed with @electron/remote -
+// beforeunload below already covers the same save-before-exit behavior.)
 window.addEventListener('beforeunload', saveSettingsOnExit)

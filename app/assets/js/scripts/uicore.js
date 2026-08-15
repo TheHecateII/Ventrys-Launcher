@@ -7,7 +7,6 @@
 // Requirements
 const $                              = require('jquery')
 const {ipcRenderer, shell, webFrame} = require('electron')
-const remote                         = require('@electron/remote')
 const isDev                          = require('./assets/js/isdev')
 const { AUTO_UPDATES_ENABLED }       = require('./assets/js/ipcconstants')
 const { LoggerUtil }                 = require('helios-core')
@@ -26,7 +25,7 @@ window.eval = global.eval = function () {
 }
 
 // Display warning when devtools window is opened.
-remote.getCurrentWebContents().on('devtools-opened', () => {
+ipcRenderer.on('devtools-opened', () => {
     console.log('%cThe console is dark and full of terrors.', 'color: white; -webkit-text-stroke: 4px #a02d2a; font-size: 60px; font-weight: bold')
     console.log('%cIf you\'ve been told to paste something here, you\'re being scammed.', 'font-size: 16px')
     console.log('%cUnless you know exactly what you\'re doing, close this window.', 'font-size: 16px')
@@ -141,20 +140,14 @@ document.addEventListener('readystatechange', function () {
         // Bind close button.
         Array.from(document.getElementsByClassName('fCb')).map((val) => {
             val.addEventListener('click', e => {
-                const window = remote.getCurrentWindow()
-                window.close()
+                ipcRenderer.send('window:close')
             })
         })
 
         // Bind restore down button.
         Array.from(document.getElementsByClassName('fRb')).map((val) => {
             val.addEventListener('click', e => {
-                const window = remote.getCurrentWindow()
-                if(window.isMaximized()){
-                    window.unmaximize()
-                } else {
-                    window.maximize()
-                }
+                ipcRenderer.send('window:toggleMaximize')
                 document.activeElement.blur()
             })
         })
@@ -162,8 +155,7 @@ document.addEventListener('readystatechange', function () {
         // Bind minimize button.
         Array.from(document.getElementsByClassName('fMb')).map((val) => {
             val.addEventListener('click', e => {
-                const window = remote.getCurrentWindow()
-                window.minimize()
+                ipcRenderer.send('window:minimize')
                 document.activeElement.blur()
             })
         })
@@ -209,7 +201,6 @@ $(document).on('click', 'a[href^="http"]', function(event) {
  */
 document.addEventListener('keydown', function (e) {
     if((e.key === 'I' || e.key === 'i') && e.ctrlKey && e.shiftKey){
-        let window = remote.getCurrentWindow()
-        window.toggleDevTools()
+        ipcRenderer.send('window:toggleDevTools')
     }
 })
