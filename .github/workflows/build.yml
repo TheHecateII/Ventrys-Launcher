@@ -5,11 +5,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  release:
+  build:
     runs-on: ${{ matrix.os }}
-
-    permissions:
-      contents: write
 
     strategy:
       fail-fast: false
@@ -36,9 +33,13 @@ jobs:
 
       - name: Build
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: npm run dist
+        # --publish never: each matrix job only builds. Publishing 3x in
+        # parallel (one per OS) against the same tag created 3 separate
+        # draft releases instead of one shared release, since draft
+        # releases aren't tag-unique. A single job downloads every
+        # platform's output and publishes once, after all builds finish.
+        run: npx electron-builder build --publish never
         shell: bash
 
       - name: Upload artifacts
@@ -48,8 +49,39 @@ jobs:
           name: installer-${{ matrix.os }}
           path: |
             dist/*.dmg
+            dist/*.dmg.blockmap
             dist/*.exe
+            dist/*.exe.blockmap
             dist/*.deb
             dist/*.zip
             dist/*.AppImage
+            dist/latest*.yml
           if-no-files-found: ignore
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v6
+
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-all
+          pattern: installer-*
+          merge-multiple: true
+
+      - name: Create release (draft) with all platform assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" dist-all/* \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            --draft
