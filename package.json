@@ -5,9 +5,9 @@
   "description": "Modded Minecraft Launcher",
   "author": "Daniel Scalzi (https://github.com/dscalzi/)",
   "license": "UNLICENSED",
-  "homepage": "https://github.com/tadroxhehe/VentrysLauncher",
+  "homepage": "https://github.com/TheHecateII/Ventrys-Launcher",
   "bugs": {
-    "url": "https://github.com/tadroxhehe/VentrysLauncher/issues"
+    "url": "https://github.com/TheHecateII/Ventrys-Launcher/issues"
   },
   "private": true,
   "main": "index.js",
@@ -49,6 +49,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tadroxhehe/VentrysLauncher.git"
+    "url": "git+https://github.com/TheHecateII/Ventrys-Launcher.git"
   }
 }

@@ -49,7 +49,7 @@ if(!isDev && AUTO_UPDATES_ENABLED){
                 
                 if(process.platform === 'darwin'){
                     const archSuffix = process.arch === 'arm64' ? '-arm64' : '-x64'
-                    info.darwindownload = `https://github.com/tadroxhehe/VentrysLauncher/releases/download/v${info.version}/Ventrys-Launcher-setup-${info.version}${archSuffix}.dmg`
+                    info.darwindownload = `https://github.com/TheHecateII/Ventrys-Launcher/releases/download/v${info.version}/Ventrys-Launcher-setup-${info.version}${archSuffix}.dmg`
                     showUpdateUI(info)
                 }
                 

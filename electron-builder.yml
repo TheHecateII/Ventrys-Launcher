@@ -56,5 +56,5 @@ directories:
 
 publish:
   provider: github
-  owner: tadroxhehe
-  repo: VentrysLauncher
+  owner: TheHecateII
+  repo: Ventrys-Launcher
