@@ -122,10 +122,29 @@ function loadStartupDistribution(){
     return DistroAPI.getDistribution()
 }
 
+/**
+ * Resolve the server that should be considered "selected", persisting it if
+ * nothing was saved yet. There's no more server-select onboarding step (V0.1
+ * is single-server), so without this the launch button stays permanently
+ * disabled on a fresh install - ConfigManager.getSelectedServer() defaults to
+ * null and getServerById(null) resolves to null.
+ */
+function resolveSelectedServer(data){
+    let serv = data.getServerById(ConfigManager.getSelectedServer())
+    if(serv == null){
+        serv = data.getMainServer()
+        if(serv != null){
+            ConfigManager.setSelectedServer(serv.rawServer.id)
+            ConfigManager.save()
+        }
+    }
+    return serv
+}
+
 function completeStartupUI(data) {
     try {
         if(typeof updateSelectedServer === 'function'){
-            updateSelectedServer(data.getServerById(ConfigManager.getSelectedServer()))
+            updateSelectedServer(resolveSelectedServer(data))
         }
         if(typeof refreshServerStatus === 'function'){
             refreshServerStatus()
@@ -149,14 +168,6 @@ function completeStartupUI(data) {
         })
     } else {
         loggerUIBinder.error('prepareSettings is not defined. Settings tab may be unavailable until restart.')
-    }
-
-    if(typeof initNews === 'function'){
-        initNews().then(() => {
-            $('#newsContainer *').attr('tabindex', '-1')
-        }).catch(err => {
-            loggerUIBinder.warn('News initialization failed during startup.', err)
-        })
     }
 }
 
@@ -215,9 +226,8 @@ function showFatalStartupError(){
  * @param {Object} data The distro index object.
  */
 function onDistroRefresh(data){
-    updateSelectedServer(data.getServerById(ConfigManager.getSelectedServer()))
+    updateSelectedServer(resolveSelectedServer(data))
     refreshServerStatus()
-    initNews()
     syncModConfigurations(data)
     ensureJavaSettings(data)
 }

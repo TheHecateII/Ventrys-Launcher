@@ -125,6 +125,7 @@ const DEFAULT_CONFIG = {
     selectedAccount: null,
     authenticationDatabase: {},
     modConfigurations: [],
+    addonConfigurations: [],
     javaConfig: {}
 }
 
@@ -541,6 +542,39 @@ exports.getModConfiguration = function(serverid){
  */
 exports.setModConfiguration = function(serverid, configuration){
     const cfgs = config.modConfigurations
+    for(let i=0; i<cfgs.length; i++){
+        if(cfgs[i].id === serverid){
+            cfgs[i] = configuration
+            return
+        }
+    }
+    cfgs.push(configuration)
+}
+
+/**
+ * Get the addon (optional mods/shaders) configuration for a specific server.
+ *
+ * @param {string} serverid The id of the server.
+ * @returns {Object} The addon configuration for the given server, or null.
+ */
+exports.getAddonConfiguration = function(serverid){
+    const cfgs = config.addonConfigurations
+    for(let i=0; i<cfgs.length; i++){
+        if(cfgs[i].id === serverid){
+            return cfgs[i]
+        }
+    }
+    return null
+}
+
+/**
+ * Set the addon configuration for a specific server. This overrides any existing value.
+ *
+ * @param {string} serverid The id of the server for the given addon configuration.
+ * @param {Object} configuration The addon configuration for the given server.
+ */
+exports.setAddonConfiguration = function(serverid, configuration){
+    const cfgs = config.addonConfigurations
     for(let i=0; i<cfgs.length; i++){
         if(cfgs[i].id === serverid){
             cfgs[i] = configuration

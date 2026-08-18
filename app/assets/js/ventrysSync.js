@@ -39,7 +39,9 @@ async function downloadTo(url, destPath, onProgress) {
         const stream = got.stream(url, { timeout: { request: 120000 } })
         const out = fs.createWriteStream(tmp)
         if (onProgress) {
-            stream.on('downloadProgress', p => onProgress(p.percent))
+            // got reports a 0-1 fraction; callers (setDownloadPercentage)
+            // expect a 0-100 whole number.
+            stream.on('downloadProgress', p => onProgress(Math.round(p.percent * 100)))
         }
         stream.on('error', reject)
         out.on('error', reject)
@@ -215,21 +217,57 @@ async function ensureForge(forgeCfg, javaPath, instanceDir, commonDir) {
 
 // ---------- forced/download/ignore file sync ----------
 
+const ADDONS_PREFIX = 'addons/'
+
 /**
  * Applies the resolved entries from config.json:
  *  - forced: download if missing or hash mismatch.
  *  - download: download only if completely absent - never touched again,
  *    intentionally (lets admins seed a default without ever overwriting a
  *    player's own edits).
+ *  - optional (addons/<realPath>): never auto-downloaded. Synced to its real
+ *    target (addons/mods/Cool.jar -> mods/Cool.jar) only if `realPath` is in
+ *    `enabledAddons`, and actively removed from that real target otherwise -
+ *    e.g. a mod the player just disabled. Its real path is also added to
+ *    `expected` so the forced-content prune pass below (which shares the
+ *    same real folders, like mods/) never mistakes an enabled addon for an
+ *    orphan.
  * Then, for every folder listed in forcedDirectories, deletes any local
- * file that isn't in `entries` - the generalized version of the old
+ * file that isn't in `expected` - the generalized version of the old
  * pruneOrphans patch, minus the whitelist limitation.
  */
-async function syncFiles(filesCfg, instanceDir, onProgress) {
+async function syncFiles(filesCfg, instanceDir, enabledAddons, onProgress) {
     const entries = filesCfg.entries
+    const enabled = new Set(enabledAddons || [])
     const expected = new Set()
 
     for (const entry of entries) {
+        if (entry.mode === 'optional') {
+            const realPath = entry.path.startsWith(ADDONS_PREFIX)
+                ? entry.path.slice(ADDONS_PREFIX.length)
+                : entry.path
+            const localPath = path.join(instanceDir, ...realPath.split('/'))
+
+            if (!enabled.has(realPath)) {
+                if (await fs.pathExists(localPath)) {
+                    await fs.remove(localPath)
+                    logger.info(`Removed disabled addon: ${localPath}`)
+                }
+                continue
+            }
+
+            expected.add(localPath)
+            let needsDownload = true
+            if (await fs.pathExists(localPath)) {
+                const digest = await sha256File(localPath)
+                needsDownload = digest !== entry.sha256
+            }
+            if (needsDownload) {
+                await downloadTo(entry.url, localPath, onProgress)
+            }
+            continue
+        }
+
         const localPath = path.join(instanceDir, ...entry.path.split('/'))
         expected.add(localPath)
 
@@ -267,6 +305,18 @@ async function pruneDirectory(dir, expected) {
         const st = await fs.lstat(full)
         if (st.isDirectory()) {
             await pruneDirectory(full, expected)
+            // Remove folders left empty by pruning (e.g. after a reorg) -
+            // otherwise stale directory husks (like an old
+            // config/openloader/resources/ nobody uses anymore) stick
+            // around forever even once every file inside is gone.
+            try {
+                if ((await fs.readdir(full)).length === 0) {
+                    await fs.rmdir(full)
+                    logger.info(`Pruned empty directory: ${full}`)
+                }
+            } catch (err) {
+                logger.warn(`Failed to prune empty dir ${full}: ${err}`)
+            }
         } else if (!expected.has(full)) {
             try {
                 await fs.remove(full)

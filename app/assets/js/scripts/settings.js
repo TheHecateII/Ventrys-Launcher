@@ -2,8 +2,14 @@
 const os     = require('os')
 const semver = require('semver')
 
-const DropinModUtil  = require('./assets/js/dropinmodutil')
-const { MSFT_OPCODE, MSFT_REPLY_TYPE, MSFT_ERROR, DROPIN_MODS_ENABLED } = require('./assets/js/ipcconstants')
+const { MSFT_OPCODE, MSFT_REPLY_TYPE, MSFT_ERROR } = require('./assets/js/ipcconstants')
+// ventrysSync / VENTRYS_SYNC_URL: NOT re-imported here - landing.js already
+// declares them as top-level const, and classic <script> tags share one
+// global lexical scope in this app (same mechanism as DistroAPI/remote) -
+// redeclaring either identifier here throws "already declared" and silently
+// breaks every landing.js binding in the same scope (found the hard way).
+
+const loggerSettingsAddons = LoggerUtil.getLogger('SettingsAddons')
 
 const settingsState = {
     invalid: new Set()
@@ -45,7 +51,6 @@ function bindFileSelectors(){
     for(let ele of document.getElementsByClassName('settingsFileSelButton')){
         
         ele.onclick = async e => {
-            const isJavaExecSel = ele.id === 'settingsJavaExecSel'
             const directoryDialog = ele.hasAttribute('dialogDirectory') && ele.getAttribute('dialogDirectory') == 'true'
             const properties = directoryDialog ? ['openDirectory', 'createDirectory'] : ['openFile']
 
@@ -57,19 +62,9 @@ function bindFileSelectors(){
                 options.title = ele.getAttribute('dialogTitle')
             }
 
-            if(isJavaExecSel && process.platform === 'win32') {
-                options.filters = [
-                    { name: Lang.queryJS('settings.fileSelectors.executables'), extensions: ['exe'] },
-                    { name: Lang.queryJS('settings.fileSelectors.allFiles'), extensions: ['*'] }
-                ]
-            }
-
             const res = await remote.dialog.showOpenDialog(remote.getCurrentWindow(), options)
             if(!res.canceled) {
                 ele.previousElementSibling.value = res.filePaths[0]
-                if(isJavaExecSel) {
-                    await populateJavaExecDetails(ele.previousElementSibling.value)
-                }
             }
         }
     }
@@ -122,7 +117,7 @@ function initSettingsValidators(){
 /**
  * Load configuration values onto the UI. This is an automated process.
  */
-async function initSettingsValues(skipJavaValidation = false){
+async function initSettingsValues(){
     const sEls = document.getElementById('settingsContainer').querySelectorAll('[cValue]')
 
     for(const v of sEls) {
@@ -137,12 +132,7 @@ async function initSettingsValues(skipJavaValidation = false){
             if(v.tagName === 'INPUT'){
                 if(v.type === 'number' || v.type === 'text'){
                     // Special Conditions
-                    if(cVal === 'JavaExecutable'){
-                        v.value = gFn.apply(null, gFnOpts)
-                        if(!skipJavaValidation){
-                            await populateJavaExecDetails(v.value)
-                        }
-                    } else if (cVal === 'DataDirectory'){
+                    if (cVal === 'DataDirectory'){
                         v.value = gFn.apply(null, gFnOpts)
                     } else if(cVal === 'JVMOptions'){
                         v.value = gFn.apply(null, gFnOpts).join(' ')
@@ -329,13 +319,11 @@ function settingsSaveDisabled(v){
 function fullSettingsSave() {
     saveSettingsValues()
     try {
-        saveModConfiguration()
+        saveAddonConfiguration()
     } catch (err) {
-        console.warn('Mod configuration could not be saved.', err)
+        console.warn('Addon configuration could not be saved.', err)
     }
     ConfigManager.save()
-    saveDropinModConfiguration()
-    saveShaderpackSettings()
 }
 
 function saveSettingsOnExit() {
@@ -367,15 +355,6 @@ settingsNavDone.onclick = () => {
 
 const msftLoginLogger = LoggerUtil.getLogger('Microsoft Login')
 const msftLogoutLogger = LoggerUtil.getLogger('Microsoft Logout')
-
-// Bind the add mojang account button.
-document.getElementById('settingsAddMojangAccount').onclick = (e) => {
-    switchView(getCurrentView(), VIEWS.login, 500, 500, () => {
-        loginViewOnCancel = VIEWS.settings
-        loginViewOnSuccess = VIEWS.settings
-        loginCancelEnabled(true)
-    })
-}
 
 // Bind the add microsoft account button.
 document.getElementById('settingsAddMicrosoftAccount').onclick = (e) => {
@@ -645,7 +624,6 @@ function refreshAuthAccountSelected(uuid){
 }
 
 const settingsCurrentMicrosoftAccounts = document.getElementById('settingsCurrentMicrosoftAccounts')
-const settingsCurrentMojangAccounts = document.getElementById('settingsCurrentMojangAccounts')
 
 /**
  * Add auth account elements for each one stored in the authentication database.
@@ -659,7 +637,6 @@ function populateAuthAccounts(){
     const selectedUUID = ConfigManager.getSelectedAccount().uuid
 
     let microsoftAuthAccountStr = ''
-    let mojangAuthAccountStr = ''
 
     authKeys.forEach((val) => {
         const acc = authAccounts[val]
@@ -688,16 +665,10 @@ function populateAuthAccounts(){
             </div>
         </div>`
 
-        if(acc.type === 'microsoft') {
-            microsoftAuthAccountStr += accHtml
-        } else {
-            mojangAuthAccountStr += accHtml
-        }
-
+        microsoftAuthAccountStr += accHtml
     })
 
     settingsCurrentMicrosoftAccounts.innerHTML = microsoftAuthAccountStr
-    settingsCurrentMojangAccounts.innerHTML = mojangAuthAccountStr
 }
 
 /**
@@ -727,393 +698,14 @@ document.getElementById('settingsGameHeight').addEventListener('keydown', (e) =>
     }
 })
 
-/**
- * Mods Tab
- */
-
-const settingsModsContainer = document.getElementById('settingsModsContainer')
+// Server status bar functions - shared by every tab with a
+// .settingsSelServContent bar (Addons, Java...), not just one specific tab.
 
 /**
- * Resolve and update the mods on the UI.
+ * Load the currently selected server information into every
+ * .settingsSelServContent bar currently in the DOM.
  */
-async function resolveModsForUI(){
-    const serv = ConfigManager.getSelectedServer()
-
-    const distro = await DistroAPI.getDistribution()
-    const servConf = ConfigManager.getModConfiguration(serv)
-
-    const modStr = parseModulesForUI(distro.getServerById(serv).modules, false, servConf.mods)
-
-    document.getElementById('settingsReqModsContent').innerHTML = modStr.reqMods
-    document.getElementById('settingsOptModsContent').innerHTML = modStr.optMods
-}
-
-/**
- * Recursively build the mod UI elements.
- * 
- * @param {Object[]} mdls An array of modules to parse.
- * @param {boolean} submodules Whether or not we are parsing submodules.
- * @param {Object} servConf The server configuration object for this module level.
- */
-function parseModulesForUI(mdls, submodules, servConf){
-
-    let reqMods = ''
-    let optMods = ''
-
-    for(const mdl of mdls){
-
-        if(mdl.rawModule.type === Type.ForgeMod || mdl.rawModule.type === Type.LiteMod || mdl.rawModule.type === Type.LiteLoader || mdl.rawModule.type === Type.FabricMod){
-
-            if(mdl.getRequired().value){
-
-                reqMods += `<div id="${mdl.getVersionlessMavenIdentifier()}" class="settingsBaseMod settings${submodules ? 'Sub' : ''}Mod" enabled>
-                    <div class="settingsModContent">
-                        <div class="settingsModMainWrapper">
-                            <div class="settingsModStatus"></div>
-                            <div class="settingsModDetails">
-                                <span class="settingsModName">${mdl.rawModule.name}</span>
-                                <span class="settingsModVersion">v${mdl.mavenComponents.version}</span>
-                            </div>
-                        </div>
-                        <label class="toggleSwitch" reqmod>
-                            <input type="checkbox" checked>
-                            <span class="toggleSwitchSlider"></span>
-                        </label>
-                    </div>
-                    ${mdl.subModules.length > 0 ? `<div class="settingsSubModContainer">
-                        ${Object.values(parseModulesForUI(mdl.subModules, true, servConf[mdl.getVersionlessMavenIdentifier()])).join('')}
-                    </div>` : ''}
-                </div>`
-
-            } else {
-
-                const conf = servConf[mdl.getVersionlessMavenIdentifier()]
-                const val = typeof conf === 'object' ? conf.value : conf
-
-                optMods += `<div id="${mdl.getVersionlessMavenIdentifier()}" class="settingsBaseMod settings${submodules ? 'Sub' : ''}Mod" ${val ? 'enabled' : ''}>
-                    <div class="settingsModContent">
-                        <div class="settingsModMainWrapper">
-                            <div class="settingsModStatus"></div>
-                            <div class="settingsModDetails">
-                                <span class="settingsModName">${mdl.rawModule.name}</span>
-                                <span class="settingsModVersion">v${mdl.mavenComponents.version}</span>
-                            </div>
-                        </div>
-                        <label class="toggleSwitch">
-                            <input type="checkbox" formod="${mdl.getVersionlessMavenIdentifier()}" ${val ? 'checked' : ''}>
-                            <span class="toggleSwitchSlider"></span>
-                        </label>
-                    </div>
-                    ${mdl.subModules.length > 0 ? `<div class="settingsSubModContainer">
-                        ${Object.values(parseModulesForUI(mdl.subModules, true, conf.mods)).join('')}
-                    </div>` : ''}
-                </div>`
-
-            }
-        }
-    }
-
-    return {
-        reqMods,
-        optMods
-    }
-
-}
-
-/**
- * Bind functionality to mod config toggle switches. Switching the value
- * will also switch the status color on the left of the mod UI.
- */
-function bindModsToggleSwitch(){
-    const sEls = settingsModsContainer.querySelectorAll('[formod]')
-    Array.from(sEls).map((v, index, arr) => {
-        v.onchange = () => {
-            if(v.checked) {
-                document.getElementById(v.getAttribute('formod')).setAttribute('enabled', '')
-            } else {
-                document.getElementById(v.getAttribute('formod')).removeAttribute('enabled')
-            }
-        }
-    })
-}
-
-
-/**
- * Save the mod configuration based on the UI values.
- */
-function saveModConfiguration(){
-    const serv = ConfigManager.getSelectedServer()
-    const modConf = ConfigManager.getModConfiguration(serv)
-    modConf.mods = _saveModConfiguration(modConf.mods)
-    ConfigManager.setModConfiguration(serv, modConf)
-}
-
-/**
- * Recursively save mod config with submods.
- * 
- * @param {Object} modConf Mod config object to save.
- */
-function _saveModConfiguration(modConf){
-    for(let m of Object.entries(modConf)){
-        const tSwitch = settingsModsContainer.querySelectorAll(`[formod='${m[0]}']`)
-        if(!tSwitch[0].hasAttribute('dropin')){
-            if(typeof m[1] === 'boolean'){
-                modConf[m[0]] = tSwitch[0].checked
-            } else {
-                if(m[1] != null){
-                    if(tSwitch.length > 0){
-                        modConf[m[0]].value = tSwitch[0].checked
-                    }
-                    modConf[m[0]].mods = _saveModConfiguration(modConf[m[0]].mods)
-                }
-            }
-        }
-    }
-    return modConf
-}
-
-// Drop-in mod elements.
-
-let CACHE_SETTINGS_MODS_DIR
-let CACHE_DROPIN_MODS
-
-/**
- * Resolve any located drop-in mods for this server and
- * populate the results onto the UI.
- */
-async function resolveDropinModsForUI(){
-    const container = document.getElementById('settingsDropinModsContainer')
-    if(!DROPIN_MODS_ENABLED){
-        if(container != null){
-            container.style.display = 'none'
-        }
-        CACHE_DROPIN_MODS = []
-        return
-    }
-    if(container != null){
-        container.style.display = null
-    }
-
-    const serv = (await DistroAPI.getDistribution()).getServerById(ConfigManager.getSelectedServer())
-    CACHE_SETTINGS_MODS_DIR = path.join(ConfigManager.getInstanceDirectory(), serv.rawServer.id, 'mods')
-    CACHE_DROPIN_MODS = DropinModUtil.scanForDropinMods(CACHE_SETTINGS_MODS_DIR, serv.rawServer.minecraftVersion)
-
-    let dropinMods = ''
-
-    for(dropin of CACHE_DROPIN_MODS){
-        dropinMods += `<div id="${dropin.fullName}" class="settingsBaseMod settingsDropinMod" ${!dropin.disabled ? 'enabled' : ''}>
-                    <div class="settingsModContent">
-                        <div class="settingsModMainWrapper">
-                            <div class="settingsModStatus"></div>
-                            <div class="settingsModDetails">
-                                <span class="settingsModName">${dropin.name}</span>
-                                <div class="settingsDropinRemoveWrapper">
-                                    <button class="settingsDropinRemoveButton" remmod="${dropin.fullName}">${Lang.queryJS('settings.dropinMods.removeButton')}</button>
-                                </div>
-                            </div>
-                        </div>
-                        <label class="toggleSwitch">
-                            <input type="checkbox" formod="${dropin.fullName}" dropin ${!dropin.disabled ? 'checked' : ''}>
-                            <span class="toggleSwitchSlider"></span>
-                        </label>
-                    </div>
-                </div>`
-    }
-
-    document.getElementById('settingsDropinModsContent').innerHTML = dropinMods
-}
-
-/**
- * Bind the remove button for each loaded drop-in mod.
- */
-function bindDropinModsRemoveButton(){
-    const sEls = settingsModsContainer.querySelectorAll('[remmod]')
-    Array.from(sEls).map((v, index, arr) => {
-        v.onclick = async () => {
-            const fullName = v.getAttribute('remmod')
-            const res = await DropinModUtil.deleteDropinMod(CACHE_SETTINGS_MODS_DIR, fullName)
-            if(res){
-                document.getElementById(fullName).remove()
-            } else {
-                setOverlayContent(
-                    Lang.queryJS('settings.dropinMods.deleteFailedTitle', { fullName }),
-                    Lang.queryJS('settings.dropinMods.deleteFailedMessage'),
-                    Lang.queryJS('settings.dropinMods.okButton')
-                )
-                setOverlayHandler(null)
-                toggleOverlay(true)
-            }
-        }
-    })
-}
-
-/**
- * Bind functionality to the file system button for the selected
- * server configuration.
- */
-function bindDropinModFileSystemButton(){
-    const fsBtn = document.getElementById('settingsDropinFileSystemButton')
-    fsBtn.onclick = () => {
-        DropinModUtil.validateDir(CACHE_SETTINGS_MODS_DIR)
-        shell.openPath(CACHE_SETTINGS_MODS_DIR)
-    }
-    fsBtn.ondragenter = e => {
-        e.dataTransfer.dropEffect = 'move'
-        fsBtn.setAttribute('drag', '')
-        e.preventDefault()
-    }
-    fsBtn.ondragover = e => {
-        e.preventDefault()
-    }
-    fsBtn.ondragleave = e => {
-        fsBtn.removeAttribute('drag')
-    }
-
-    fsBtn.ondrop = async e => {
-        fsBtn.removeAttribute('drag')
-        e.preventDefault()
-
-        DropinModUtil.addDropinMods(e.dataTransfer.files, CACHE_SETTINGS_MODS_DIR)
-        await reloadDropinMods()
-    }
-}
-
-/**
- * Save drop-in mod states. Enabling and disabling is just a matter
- * of adding/removing the .disabled extension.
- */
-function saveDropinModConfiguration(){
-    if(!DROPIN_MODS_ENABLED){
-        return
-    }
-    for(dropin of CACHE_DROPIN_MODS){
-        const dropinUI = document.getElementById(dropin.fullName)
-        if(dropinUI != null){
-            const dropinUIEnabled = dropinUI.hasAttribute('enabled')
-            if(DropinModUtil.isDropinModEnabled(dropin.fullName) != dropinUIEnabled){
-                DropinModUtil.toggleDropinMod(CACHE_SETTINGS_MODS_DIR, dropin.fullName, dropinUIEnabled).catch(err => {
-                    if(!isOverlayVisible()){
-                        setOverlayContent(
-                            Lang.queryJS('settings.dropinMods.failedToggleTitle'),
-                            err.message,
-                            Lang.queryJS('settings.dropinMods.okButton')
-                        )
-                        setOverlayHandler(null)
-                        toggleOverlay(true)
-                    }
-                })
-            }
-        }
-    }
-}
-
-// Refresh the drop-in mods when F5 is pressed.
-// Only active on the mods tab.
-document.addEventListener('keydown', async (e) => {
-    if(getCurrentView() === VIEWS.settings && selectedSettingsTab === 'settingsTabMods'){
-        if(e.key === 'F5'){
-            if(DROPIN_MODS_ENABLED){
-                await reloadDropinMods()
-            }
-            saveShaderpackSettings()
-            await resolveShaderpacksForUI()
-        }
-    }
-})
-
-async function reloadDropinMods(){
-    await resolveDropinModsForUI()
-    bindDropinModsRemoveButton()
-    bindDropinModFileSystemButton()
-    bindModsToggleSwitch()
-}
-
-// Shaderpack
-
-let CACHE_SETTINGS_INSTANCE_DIR
-let CACHE_SHADERPACKS
-let CACHE_SELECTED_SHADERPACK
-
-/**
- * Load shaderpack information.
- */
-async function resolveShaderpacksForUI(){
-    const serv = (await DistroAPI.getDistribution()).getServerById(ConfigManager.getSelectedServer())
-    CACHE_SETTINGS_INSTANCE_DIR = path.join(ConfigManager.getInstanceDirectory(), serv.rawServer.id)
-    CACHE_SHADERPACKS = DropinModUtil.scanForShaderpacks(CACHE_SETTINGS_INSTANCE_DIR)
-    CACHE_SELECTED_SHADERPACK = DropinModUtil.getEnabledShaderpack(CACHE_SETTINGS_INSTANCE_DIR)
-
-    setShadersOptions(CACHE_SHADERPACKS, CACHE_SELECTED_SHADERPACK)
-}
-
-function setShadersOptions(arr, selected){
-    const cont = document.getElementById('settingsShadersOptions')
-    cont.innerHTML = ''
-    for(let opt of arr) {
-        const d = document.createElement('DIV')
-        d.innerHTML = opt.name
-        d.setAttribute('value', opt.fullName)
-        if(opt.fullName === selected) {
-            d.setAttribute('selected', '')
-            document.getElementById('settingsShadersSelected').innerHTML = opt.name
-        }
-        d.addEventListener('click', function(e) {
-            this.parentNode.previousElementSibling.innerHTML = this.innerHTML
-            for(let sib of this.parentNode.children){
-                sib.removeAttribute('selected')
-            }
-            this.setAttribute('selected', '')
-            closeSettingsSelect()
-        })
-        cont.appendChild(d)
-    }
-}
-
-function saveShaderpackSettings(){
-    let sel = 'OFF'
-    for(let opt of document.getElementById('settingsShadersOptions').childNodes){
-        if(opt.hasAttribute('selected')){
-            sel = opt.getAttribute('value')
-        }
-    }
-    DropinModUtil.setEnabledShaderpack(CACHE_SETTINGS_INSTANCE_DIR, sel)
-}
-
-function bindShaderpackButton() {
-    const spBtn = document.getElementById('settingsShaderpackButton')
-    spBtn.onclick = () => {
-        const p = path.join(CACHE_SETTINGS_INSTANCE_DIR, 'shaderpacks')
-        DropinModUtil.validateDir(p)
-        shell.openPath(p)
-    }
-    spBtn.ondragenter = e => {
-        e.dataTransfer.dropEffect = 'move'
-        spBtn.setAttribute('drag', '')
-        e.preventDefault()
-    }
-    spBtn.ondragover = e => {
-        e.preventDefault()
-    }
-    spBtn.ondragleave = e => {
-        spBtn.removeAttribute('drag')
-    }
-
-    spBtn.ondrop = async e => {
-        spBtn.removeAttribute('drag')
-        e.preventDefault()
-
-        DropinModUtil.addShaderpacks(e.dataTransfer.files, CACHE_SETTINGS_INSTANCE_DIR)
-        saveShaderpackSettings()
-        await resolveShaderpacksForUI()
-    }
-}
-
-// Server status bar functions.
-
-/**
- * Load the currently selected server information onto the mods tab.
- */
-async function loadSelectedServerOnModsTab(){
+async function refreshSelServContent(){
     const serv = (await DistroAPI.getDistribution()).getServerById(ConfigManager.getSelectedServer())
 
     for(const el of document.getElementsByClassName('settingsSelServContent')) {
@@ -1150,15 +742,6 @@ Array.from(document.getElementsByClassName('settingsSwitchServerButton')).forEac
 })
 
 /**
- * Save mod configuration for the current selected server.
- */
-function saveAllModConfigurations(){
-    saveModConfiguration()
-    ConfigManager.save()
-    saveDropinModConfiguration()
-}
-
-/**
  * Function to refresh the current tab whenever the selected
  * server is changed.
  */
@@ -1170,17 +753,154 @@ function animateSettingsTabRefresh(){
 }
 
 /**
- * Prepare the Mods tab for display.
+ * Addons Tab
+ *
+ * Independent of the old distribution.json module tree (which no longer
+ * carries any module data - see distromanager.js) - fetches the ventrys-sync
+ * backend directly. An "addon" is any entry the backend resolves to mode
+ * "optional" (everything under an addons/ folder by convention, see
+ * app/rules.py in the ventrys-sync repo). Its real target path
+ * (addons/mods/Cool.jar -> mods/Cool.jar) is used both as the DOM join key
+ * (`formod`) and as the value persisted via ConfigManager - actual
+ * download/removal only happens during the next sync (ventrysSync.syncFiles),
+ * not from here.
  */
-async function prepareModsTab(first){
-    await resolveModsForUI()
-    await resolveDropinModsForUI()
-    await resolveShaderpacksForUI()
-    bindDropinModsRemoveButton()
-    bindDropinModFileSystemButton()
-    bindShaderpackButton()
-    bindModsToggleSwitch()
-    await loadSelectedServerOnModsTab()
+
+const settingsAddonsContainer = document.getElementById('settingsAddonsContainer')
+const ADDONS_ENTRY_PREFIX = 'addons/'
+
+// Cosmetic-only: nicer section headers than the raw folder name.
+const ADDON_GROUP_LABELS = {
+    mods: 'Mods',
+    shaderpacks: 'Shaderpacks',
+    resourcepacks: 'Resource Packs'
+}
+
+/**
+ * Resolve and update the addons list on the UI.
+ */
+async function resolveAddonsForUI(){
+    const serv = ConfigManager.getSelectedServer()
+    const servConf = ConfigManager.getAddonConfiguration(serv)
+    const enabled = new Set(servConf != null ? servConf.enabled : [])
+
+    let entries = []
+    try {
+        const syncConfig = await ventrysSync.fetchConfig(VENTRYS_SYNC_URL)
+        entries = (syncConfig.entries || []).filter(e => e.mode === 'optional' && e.path.startsWith(ADDONS_ENTRY_PREFIX))
+    } catch (err) {
+        loggerSettingsAddons.warn('Unable to fetch addon list.', err)
+    }
+
+    document.getElementById('settingsAddonsContent').innerHTML = parseAddonsForUI(entries, enabled)
+}
+
+/**
+ * Build the addon UI, grouped by the folder the addon actually lives in
+ * once installed (mods/, shaderpacks/, ...).
+ *
+ * @param {Object[]} entries Flat list of "optional" mode entries from config.json.
+ * @param {Set<string>} enabled Real target paths currently enabled for this server.
+ */
+function parseAddonsForUI(entries, enabled){
+    if(entries.length === 0){
+        return `<div id="settingsAddonsEmpty">${Lang.queryJS('settings.noAddons')}</div>`
+    }
+
+    const groups = {}
+    for(const entry of entries){
+        const realPath = entry.path.slice(ADDONS_ENTRY_PREFIX.length)
+        const sepIndex = realPath.indexOf('/')
+        const group = sepIndex === -1 ? realPath : realPath.substring(0, sepIndex)
+        const name = sepIndex === -1 ? realPath : realPath.substring(sepIndex + 1)
+        if(groups[group] == null){
+            groups[group] = []
+        }
+        groups[group].push({ realPath, name, size: entry.size })
+    }
+
+    let html = ''
+    for(const group of Object.keys(groups).sort()){
+        const label = ADDON_GROUP_LABELS[group] || (group.charAt(0).toUpperCase() + group.slice(1))
+        html += `<div class="settingsAddonGroupContainer">
+            <div class="settingsModsHeader">${label}</div>
+            <div class="settingsAddonGroupContent">
+                ${groups[group].map(addon => addonRowHTML(addon, enabled.has(addon.realPath))).join('')}
+            </div>
+        </div>`
+    }
+    return html
+}
+
+function addonRowHTML(addon, isEnabled){
+    return `<div id="addon-${cssEscape(addon.realPath)}" class="settingsBaseMod settingsMod" ${isEnabled ? 'enabled' : ''}>
+        <div class="settingsModContent">
+            <div class="settingsModMainWrapper">
+                <div class="settingsModStatus"></div>
+                <div class="settingsModDetails">
+                    <span class="settingsModName">${addon.name}</span>
+                    <span class="settingsModVersion">${formatAddonSize(addon.size)}</span>
+                </div>
+            </div>
+            <label class="toggleSwitch">
+                <input type="checkbox" formod="${addon.realPath}" ${isEnabled ? 'checked' : ''}>
+                <span class="toggleSwitchSlider"></span>
+            </label>
+        </div>
+    </div>`
+}
+
+function formatAddonSize(bytes){
+    if(bytes < 1024) return `${bytes} B`
+    if(bytes < 1024*1024) return `${(bytes/1024).toFixed(1)} KB`
+    return `${(bytes/(1024*1024)).toFixed(1)} MB`
+}
+
+// Real target paths contain '/' - not valid in a raw CSS id selector unless escaped.
+function cssEscape(str){
+    return str.replace(/[^a-zA-Z0-9_-]/g, '_')
+}
+
+/**
+ * Bind functionality to addon toggle switches, keyed off the addon's real
+ * target path instead of a maven identifier.
+ */
+function bindAddonsToggleSwitch(){
+    const sEls = settingsAddonsContainer.querySelectorAll('[formod]')
+    Array.from(sEls).forEach(v => {
+        v.onchange = () => {
+            const row = document.getElementById(`addon-${cssEscape(v.getAttribute('formod'))}`)
+            if(v.checked) {
+                row.setAttribute('enabled', '')
+            } else {
+                row.removeAttribute('enabled')
+            }
+        }
+    })
+}
+
+/**
+ * Save the addon configuration based on the UI values. Only persists the
+ * player's choice - the actual download/removal happens on the next sync
+ * (ventrysSync.syncFiles, see landing.js).
+ */
+function saveAddonConfiguration(){
+    const serv = ConfigManager.getSelectedServer()
+    const enabled = []
+    settingsAddonsContainer.querySelectorAll('[formod]').forEach(tSwitch => {
+        if(tSwitch.checked){
+            enabled.push(tSwitch.getAttribute('formod'))
+        }
+    })
+    ConfigManager.setAddonConfiguration(serv, { id: serv, enabled })
+}
+
+/**
+ * Prepare the Addons tab for display.
+ */
+async function prepareAddonsTab(){
+    await resolveAddonsForUI()
+    bindAddonsToggleSwitch()
 }
 
 /**
@@ -1194,8 +914,6 @@ const settingsMaxRAMLabel     = document.getElementById('settingsMaxRAMLabel')
 const settingsMinRAMLabel     = document.getElementById('settingsMinRAMLabel')
 const settingsMemoryTotal     = document.getElementById('settingsMemoryTotal')
 const settingsMemoryAvail     = document.getElementById('settingsMemoryAvail')
-const settingsJavaExecDetails = document.getElementById('settingsJavaExecDetails')
-const settingsJavaReqDesc     = document.getElementById('settingsJavaReqDesc')
 const settingsJvmOptsLink     = document.getElementById('settingsJvmOptsLink')
 
 // Bind on change event for min memory container.
@@ -1372,28 +1090,6 @@ function populateMemoryStatus(){
     settingsMemoryAvail.innerHTML = Number(os.freemem()/1073741824).toFixed(1) + 'G'
 }
 
-/**
- * Validate the provided executable path and display the data on
- * the UI.
- * 
- * @param {string} execPath The executable path to populate against.
- */
-async function populateJavaExecDetails(execPath){
-    const server = (await DistroAPI.getDistribution()).getServerById(ConfigManager.getSelectedServer())
-
-    const details = await validateSelectedJvm(ensureJavaDirIsRoot(execPath), server.effectiveJavaOptions.supported)
-
-    if(details != null) {
-        settingsJavaExecDetails.innerHTML = Lang.queryJS('settings.java.selectedJava', { version: details.semverStr, vendor: details.vendor })
-    } else {
-        settingsJavaExecDetails.innerHTML = Lang.queryJS('settings.java.invalidSelection')
-    }
-}
-
-function populateJavaReqDesc(server) {
-    settingsJavaReqDesc.innerHTML = Lang.queryJS('settings.java.requiresJava', { major: server.effectiveJavaOptions.suggestedMajor })
-}
-
 function populateJvmOptsLink(server) {
     const major = server.effectiveJavaOptions.suggestedMajor
     settingsJvmOptsLink.innerHTML = Lang.queryJS('settings.java.availableOptions', { major: major })
@@ -1431,7 +1127,6 @@ async function prepareJavaTab(){
     bindMinMaxRam(server)
     bindRangeSlider(server)
     populateMemoryStatus()
-    populateJavaReqDesc(server)
     populateJvmOptsLink(server)
 }
 
@@ -1496,7 +1191,7 @@ function populateAboutVersionInformation(){
  */
 function populateReleaseNotes(){
     $.ajax({
-        url: 'https://github.com/dscalzi/HeliosLauncher/releases.atom',
+        url: 'https://github.com/TheHecateII/Ventrys-Launcher/releases.atom',
         success: (data) => {
             const version = 'v' + remote.app.getVersion()
             const entries = $(data).find('entry')
@@ -1614,9 +1309,10 @@ async function prepareSettings(first = false) {
         initSettingsValidators()
         prepareUpdateTab()
     } else {
-        await prepareModsTab()
+        await prepareAddonsTab()
     }
-    await initSettingsValues(first)
+    await refreshSelServContent()
+    await initSettingsValues()
     prepareAccountsTab()
     await prepareJavaTab()
     prepareAboutTab()

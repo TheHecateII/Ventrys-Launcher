@@ -1692,7 +1692,8 @@ input:checked + .toggleSwitchSlider:before {
 * * */
 
 /* Main content container for the mod elements. */
-#settingsModsContainer {
+#settingsModsContainer,
+#settingsAddonsContainer {
     width: 75%;
 }
 
@@ -1706,18 +1707,25 @@ input:checked + .toggleSwitchSlider:before {
 /* Mod elements sub-containers. */
 #settingsReqModsContainer,
 #settingsOptModsContainer,
-#settingsDropinModsContainer {
+#settingsDropinModsContainer,
+.settingsAddonGroupContainer {
     padding-bottom: 25px;
 }
 
 /* Main content containers for mod elements. */
 #settingsReqModsContent,
 #settingsOptModsContent,
-#settingsDropinModsContent {
+#settingsDropinModsContent,
+.settingsAddonGroupContent,
+#settingsAddonsEmpty {
     font-size: 12px;
     background: rgba(0, 0, 0, 0.25);
     border-radius: 3px;
     color: white;
+}
+
+#settingsAddonsEmpty {
+    padding: 15px;
 }
 
 /* Mod elements. */
@@ -3094,7 +3102,8 @@ input:checked + .toggleSwitchSlider:before {
     outline: none;
 }
 
-#settingsMediaContainer {
+#settingsMediaContainer,
+#devToolsMediaContainer {
     position: relative;
 }
 
@@ -3109,8 +3118,20 @@ input:checked + .toggleSwitchSlider:before {
     height: 23px;
 }
 
-/* Settings tooltip styles. */
-#settingsTooltip {
+/* DevTools icon colors - same hover-grow treatment as the settings gear. */
+#devToolsSVG {
+    stroke: #ffffff;
+    height: 15px;
+}
+.mediaButton:hover #devToolsSVG,
+.mediaButton:focus #devToolsSVG,
+.mediaButton:active #devToolsSVG {
+    height: 23px;
+}
+
+/* Settings/DevTools tooltip styles. */
+#settingsTooltip,
+#devToolsTooltip {
     visibility: hidden;
     opacity: 0;
     width: 75px;
@@ -3125,7 +3146,8 @@ input:checked + .toggleSwitchSlider:before {
     line-height: 20px;
     transition: visibility 0s linear 0.25s, opacity 0.25s ease;
 }
-#settingsTooltip::after {
+#settingsTooltip::after,
+#devToolsTooltip::after {
     content: " ";
     position: absolute;
     top: 50%;
@@ -3137,7 +3159,10 @@ input:checked + .toggleSwitchSlider:before {
 }
 .mediaButton:hover #settingsTooltip,
 .mediaButton:focus #settingsTooltip,
-.mediaButton:active #settingsTooltip {
+.mediaButton:active #settingsTooltip,
+.mediaButton:hover #devToolsTooltip,
+.mediaButton:focus #devToolsTooltip,
+.mediaButton:active #devToolsTooltip {
     visibility: visible;
     opacity: 1;
     transition-delay:0s;
