@@ -14,7 +14,6 @@ const {
 }                             = require('helios-core/common')
 const {
     FullRepair,
-    DistributionIndexProcessor,
     MojangIndexProcessor,
     downloadFile
 }                             = require('helios-core/dl')
@@ -28,9 +27,12 @@ const {
 }                             = require('helios-core/java')
 
 // Internal Requirements
+const fs                      = require('fs-extra')
 const DiscordWrapper          = require('./assets/js/discordwrapper')
 const ProcessBuilder          = require('./assets/js/processbuilder')
 const { ensureDefaultServerList } = require('./assets/js/serverlistutil')
+const ventrysSync              = require('./assets/js/ventrysSync')
+const { VENTRYS_SYNC_URL }    = require('./assets/js/ventrysSyncConfig')
 
 // Launch Elements
 const launch_content          = document.getElementById('launch_content')
@@ -561,18 +563,43 @@ async function dlAsync(login = true) {
 
     let modLoaderData
     let versionData
+    let realServ
     try {
+        // Vanilla Minecraft assets only - unrelated to distribution.json,
+        // untouched by the Ventrys sync switch below.
         const mojangIndexProcessor = new MojangIndexProcessor(
             ConfigManager.getCommonDirectory(),
             serv.rawServer.minecraftVersion)
-        const distributionIndexProcessor = new DistributionIndexProcessor(
-            ConfigManager.getCommonDirectory(),
-            distro,
-            serv.rawServer.id
-        )
-
-        modLoaderData = await distributionIndexProcessor.loadModLoaderVersionJson(serv)
         versionData = await mojangIndexProcessor.getVersionJson()
+
+        // Ventrys sync: Java, Forge (installed for real, locally), and
+        // mods/config/resourcepacks via forced/download/ignore rules -
+        // replaces what DistributionIndexProcessor/Nebula used to do.
+        setLaunchDetails(Lang.queryJS('landing.dlAsync.pleaseWait'))
+        const commonDir = ConfigManager.getCommonDirectory()
+        const instancesRoot = ConfigManager.getInstanceDirectory()
+        const instanceDir = ConfigManager.getServerInstanceDirectory(serv.rawServer.id)
+
+        const syncConfig = await ventrysSync.fetchConfig(VENTRYS_SYNC_URL)
+        const javaPath = await ventrysSync.ensureJava(syncConfig.java, commonDir)
+        const forgeVersionJsonPath = await ventrysSync.ensureForge(
+            syncConfig.forge, javaPath, instanceDir, commonDir)
+        await ventrysSync.syncFiles(syncConfig.files, instanceDir, percent => {
+            setDownloadPercentage(percent)
+        })
+
+        modLoaderData = await fs.readJson(forgeVersionJsonPath)
+        realServ = ventrysSync.buildDistribution({
+            id: serv.rawServer.id,
+            name: serv.rawServer.name,
+            description: serv.rawServer.description,
+            icon: serv.rawServer.icon,
+            address: serv.rawServer.address,
+            minecraftVersion: serv.rawServer.minecraftVersion,
+            forgeVersion: syncConfig.forge.forgeVersion,
+            discord: serv.rawServer.discord,
+            autoconnect: serv.rawServer.autoconnect
+        }, modLoaderData, commonDir, instancesRoot)
     } catch (err) {
         loggerLaunchSuite.error('Error while preparing launch metadata.', err)
         showLaunchFailure(Lang.queryJS('landing.dlAsync.errorDuringLaunchTitle'), err.message || Lang.queryJS('landing.dlAsync.checkConsoleForDetails'))
@@ -582,7 +609,7 @@ async function dlAsync(login = true) {
     if(login) {
         const authUser = ConfigManager.getSelectedAccount()
         loggerLaunchSuite.info(`Sending selected account (${authUser.displayName}) to ProcessBuilder.`)
-        let pb = new ProcessBuilder(serv, versionData, modLoaderData, authUser, remote.app.getVersion())
+        let pb = new ProcessBuilder(realServ, versionData, modLoaderData, authUser, remote.app.getVersion())
         setLaunchDetails(Lang.queryJS('landing.dlAsync.launchingGame'))
 
         // const SERVER_JOINED_REGEX = /\[.+\]: \[CHAT\] [a-zA-Z0-9_]{1,16} joined the game/
