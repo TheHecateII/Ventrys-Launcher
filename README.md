@@ -2,44 +2,44 @@
 
 <h1 align="center">Ventrys Launcher</h1>
 
-<p align="center">Launcher Minecraft modded (Electron) qui installe et synchronise automatiquement Java, Forge, les mods et le contenu optionnel depuis un backend maison - le joueur n'a rien à faire à part se connecter et cliquer sur Jouer.</p>
+<p align="center">Electron-based modded Minecraft launcher that automatically installs and synchronizes Java, Forge, mods, and optional content from a custom backend - the player just logs in and clicks Play.</p>
 
-## Qu'est-ce que c'est vraiment
+## Project status
 
-C'est un **POC vibe-codé**, construit par-dessus la base d'[HeliosLauncher][helios] (dscalzi) : l'interface, l'authentification Microsoft et le système de mise à jour du launcher lui-même viennent de là et fonctionnent très bien. Tout ce qui concernait la distribution du contenu (mods/Java/Forge, anciennement piloté par `distribution.json` généré via [Nebula][nebula]) a en revanche été entièrement remplacé par un backend Python maison ([`ventrys-sync`][ventrys-sync]).
+This is a proof of concept, built on top of [HeliosLauncher][helios] (dscalzi): the UI, Microsoft authentication, and the launcher's own self-update mechanism come from there and work as-is. Everything related to content distribution (mods/Java/Forge, originally driven by a hand-generated `distribution.json`) has been replaced with a custom Python backend, [`ventrys-sync`][ventrys-sync].
 
-**Pourquoi ce choix, honnêtement** : HeliosLauncher + Nebula reste une solution largement plus solide et professionnelle que ce projet. Le vrai problème, c'était la pipeline de distribution elle-même - régénérer `distribution.json` avec Nebula à chaque changement de modpack, le réuploader à la main, gérer les mods optionnels via un arbre de modules complexe... beaucoup trop fastidieux pour la taille de ce projet. `ventrys-sync` remplace tout ça par un dossier qu'on synchronise (SFTP) et un backend qui scanne et sert son contenu tout seul.
+**Why the rewrite**: HeliosLauncher + [Nebula][nebula] is a more mature and generally more robust solution than this project. The actual problem was the distribution pipeline itself - regenerating `distribution.json` with Nebula on every modpack change, re-uploading it by hand, and managing optional mods through a nested module tree - too much overhead for a project this size. `ventrys-sync` replaces that entire pipeline with a synced directory (SFTP) and a backend that scans and serves its own content.
 
-**Si tu cherches une solution de launcher clé en main**, sérieuse et déjà maintenue par des pros, regarde plutôt **[launch-it.app](https://launch-it.app/)**. Ce repo est un projet perso, pas un produit.
+**Looking for a turnkey launcher solution instead?** [launch-it.app](https://launch-it.app/) is a maintained, professional product. This repository is not.
 
-## État actuel et roadmap
+## Current scope and roadmap
 
-- Aujourd'hui, ce launcher est **codé en dur pour le serveur Ventrys** (une seule URL de backend `ventrys-sync`).
-- **Prévu** : rendre le projet réellement générique et open source, pour que n'importe qui puisse héberger son propre backend `ventrys-sync` et n'ait qu'à changer l'URL de l'endpoint (`ventrysSyncConfig.js`) pour pointer son propre launcher dessus - sans toucher au reste du code.
-- **Support d'autres mod loaders** (Fabric, NeoForge...) : prévu aussi. Le workflow actuel avec Forge est en réalité générique - le launcher se contente de récupérer un setup client (installeur/Java) depuis le backend et de l'exécuter localement, sans logique propre à Forge codée en dur. Étendre à un autre loader ne devrait pas être compliqué au vu de ce qui marche déjà.
+- The launcher is currently **hardcoded to a single server** (one `ventrys-sync` backend URL, `app/assets/js/ventrysSyncConfig.js`).
+- **Planned**: make the project genuinely reusable and open source, so anyone can self-host their own `ventrys-sync` backend and only needs to change that one endpoint URL to point their own launcher build at it - no other code changes required.
+- **Other mod loaders** (Fabric, NeoForge, ...): also planned. The current Forge-specific behavior is really just "fetch a client setup (installer/Java) from the backend and execute it locally" - there's no Forge-specific logic hardcoded elsewhere in the sync/launch pipeline, so extending to another loader shouldn't require deep rework.
 
-## Ce que fait le launcher
+## What the launcher does
 
-- **Compte Microsoft** (OAuth 2.0) - gestion multi-comptes, credentials jamais stockés/transmis ailleurs qu'à Microsoft.
-- **Java, Forge, mods et fichiers de config synchronisés automatiquement** depuis `ventrys-sync` à chaque lancement - rien à installer à la main, rien à choisir.
-- **Addons optionnels** : mods/shaders proposés par le serveur mais non imposés, activables/désactivables depuis Settings.
-- **Nettoyage des fichiers orphelins** : un fichier retiré côté serveur est supprimé côté joueur au lancement suivant (scopé aux dossiers explicitement gérés, jamais aux saves/screenshots/logs).
-- **Mise à jour automatique du launcher** lui-même (`electron-updater`, releases GitHub de ce repo).
-- Réglages RAM / options JVM, statut des services Mojang, console de debug intégrée (icône dédiée sur l'écran principal).
+- **Microsoft account authentication** (OAuth 2.0) - multi-account support, credentials never stored or sent anywhere but Microsoft.
+- **Automatic Java, Forge, mod, and config sync** from `ventrys-sync` on every launch - nothing to install or choose manually.
+- **Optional addons**: mods/shaders the server makes available but doesn't enforce, toggled per-player from Settings.
+- **Orphan file cleanup**: a file removed server-side is removed client-side on the next launch (scoped to explicitly-managed folders only - never touches saves/screenshots/logs).
+- **Self-updating launcher** (`electron-updater`, GitHub releases of this repo).
+- RAM / JVM options, Mojang service status, and a built-in debug console (dedicated button on the main screen).
 
-Ce qui a été retiré par rapport à HeliosLauncher d'origine : `distribution.json`/Nebula, sélection multi-serveurs (prévu de revenir sous forme de plusieurs URLs de backends), flux d'actus RSS, Discord Rich Presence, comptes Mojang (Yggdrasil, déprécié par Mojang), auto-détection/téléchargement Java via Adoptium.
+Removed relative to upstream HeliosLauncher: `distribution.json`/Nebula, multi-server selection (planned to come back as multiple backend URLs), RSS news feed, Discord Rich Presence, Mojang (Yggdrasil) account login (deprecated by Mojang), Java auto-detection/download via Adoptium.
 
 ## Architecture
 
 ```
-joueur <-> Ventrys Launcher (ce repo) <-> ventrys-sync (backend Python, repo séparé)
+player <-> Ventrys Launcher (this repo) <-> ventrys-sync (Python backend, separate repo)
 ```
 
-Le launcher ne contient aucune logique de contenu : il interroge `ventrys-sync` (`/config.json`) pour savoir quoi installer/synchroniser, télécharge, installe Forge via son vrai installeur officiel (headless), et lance le jeu. Voir [`ventrys-sync`][ventrys-sync] pour le détail du backend (règles forced/download/ignore/optional, panel admin, explorateur de fichiers).
+The launcher itself holds no content logic: it queries `ventrys-sync` (`/config.json`) for what to install/sync, downloads it, installs Forge via the real official installer (headless), and launches the game. See [`ventrys-sync`][ventrys-sync] for backend details (forced/download/ignore/optional rules, admin panel, file browser).
 
-## Développement
+## Development
 
-**Prérequis** : [Node.js][nodejs] v22
+**Requirements**: [Node.js][nodejs] v22
 
 ```console
 git clone https://github.com/TheHecateII/Ventrys-Launcher.git
@@ -48,22 +48,26 @@ npm install
 npm start
 ```
 
-Pointer le launcher vers un backend `ventrys-sync` : éditer `app/assets/js/ventrysSyncConfig.js`.
+Point the launcher at a `ventrys-sync` backend: edit `app/assets/js/ventrysSyncConfig.js`.
 
-**Build des installeurs**
+**Build installers**
 
 ```console
-npm run dist        # plateforme courante
+npm run dist        # current platform
 npm run dist:win
 npm run dist:mac
 npm run dist:linux
 ```
 
-**Console de debug** : `Ctrl+Shift+I`, ou le bouton dédié sur l'écran principal (icône à côté des Paramètres).
+**Debug console**: `Ctrl+Shift+I`, or the dedicated button on the main screen (next to Settings).
+
+## Contributing
+
+If you're an actual developer and interested in helping maintain this, reach out on Discord: **thehecateii**.
 
 ## Attribution
 
-Basé sur [HeliosLauncher][helios] par Daniel Scalzi (dscalzi), sous licence MIT - voir `LICENSE.txt`.
+Based on [HeliosLauncher][helios] by Daniel Scalzi (dscalzi), MIT licensed - see `LICENSE.txt`.
 
 [helios]: https://github.com/dscalzi/HeliosLauncher 'HeliosLauncher'
 [nebula]: https://github.com/dscalzi/Nebula 'dscalzi/Nebula'
