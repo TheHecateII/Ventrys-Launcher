@@ -23,6 +23,21 @@ const { LoggerUtil } = require('helios-core')
 
 const logger = LoggerUtil.getLogger('VentrysSync')
 
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+// Broader than helios-core's own retryableError (which only covers
+// ECONNRESET/no-response and misses TimeoutError): a flaky connection
+// (4G/ADSL) doesn't always reset cleanly, it often just stalls until
+// something gives up and raises TimeoutError instead. got.RequestError
+// covers every network-level failure (connection refused/reset, stalled/
+// timed out, etc.); a real HTTP error response (404, ...) is a separate
+// got.HTTPError class and won't match here, so we still don't retry those.
+function isRetryableError(error) {
+    return error instanceof got.RequestError
+}
+
 // ---------- config fetch ----------
 
 async function fetchConfig(baseUrl) {
@@ -32,22 +47,40 @@ async function fetchConfig(baseUrl) {
 
 // ---------- downloads ----------
 
+const MAX_DOWNLOAD_RETRIES = 10
+
 async function downloadTo(url, destPath, onProgress) {
     await fs.ensureDir(path.dirname(destPath))
     const tmp = `${destPath}.download`
-    await new Promise((resolve, reject) => {
-        const stream = got.stream(url, { timeout: { request: 120000 } })
-        const out = fs.createWriteStream(tmp)
-        if (onProgress) {
-            // got reports a 0-1 fraction; callers (setDownloadPercentage)
-            // expect a 0-100 whole number.
-            stream.on('downloadProgress', p => onProgress(Math.round(p.percent * 100)))
+
+    let retryCount = 0
+    for (;;) {
+        try {
+            await new Promise((resolve, reject) => {
+                const stream = got.stream(url, { timeout: { request: 120000 } })
+                const out = fs.createWriteStream(tmp)
+                if (onProgress) {
+                    // got reports a 0-1 fraction; callers (setDownloadPercentage)
+                    // expect a 0-100 whole number.
+                    stream.on('downloadProgress', p => onProgress(Math.round(p.percent * 100)))
+                }
+                stream.on('error', reject)
+                out.on('error', reject)
+                out.on('finish', resolve)
+                stream.pipe(out)
+            })
+            break
+        } catch (err) {
+            retryCount++
+            if (retryCount > MAX_DOWNLOAD_RETRIES || !isRetryableError(err)) {
+                throw err
+            }
+            logger.warn(`Download of ${url} failed (${err.code || err.name}), retry ${retryCount}/${MAX_DOWNLOAD_RETRIES}...`)
+            if (onProgress) onProgress(0)
+            await sleep(1000)
         }
-        stream.on('error', reject)
-        out.on('error', reject)
-        out.on('finish', resolve)
-        stream.pipe(out)
-    })
+    }
+
     await fs.move(tmp, destPath, { overwrite: true })
 }
 
