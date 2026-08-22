@@ -60,9 +60,10 @@ async function downloadTo(url, destPath, onProgress) {
                 const stream = got.stream(url, { timeout: { request: 120000 } })
                 const out = fs.createWriteStream(tmp)
                 if (onProgress) {
-                    // got reports a 0-1 fraction; callers (setDownloadPercentage)
-                    // expect a 0-100 whole number.
-                    stream.on('downloadProgress', p => onProgress(Math.round(p.percent * 100)))
+                    // Raw byte counts, not a 0-100 percent: callers downloading
+                    // several files (syncFiles) need transferred/total to weigh
+                    // this file into an overall percentage, not just this file's.
+                    stream.on('downloadProgress', p => onProgress(p.transferred, p.total))
                 }
                 stream.on('error', reject)
                 out.on('error', reject)
@@ -76,12 +77,23 @@ async function downloadTo(url, destPath, onProgress) {
                 throw err
             }
             logger.warn(`Download of ${url} failed (${err.code || err.name}), retry ${retryCount}/${MAX_DOWNLOAD_RETRIES}...`)
-            if (onProgress) onProgress(0)
+            if (onProgress) onProgress(0, 0)
             await sleep(1000)
         }
     }
 
     await fs.move(tmp, destPath, { overwrite: true })
+}
+
+// Adapts downloadTo's raw (transferred, total) callback into the
+// { file, percent } shape landing.js uses to show what's downloading -
+// for single-file callers (ensureJava/ensureForge) where "total" is just
+// that one file's size.
+function singleFileProgress(fileName, onProgress) {
+    if (!onProgress) return undefined
+    return (transferred, total) => {
+        onProgress({ file: fileName, percent: total > 0 ? Math.round((transferred / total) * 100) : 0 })
+    }
 }
 
 function sha256File(filePath) {
@@ -113,7 +125,7 @@ function javaExecutableIn(javaHome) {
  * the zip root, no nested jdk-x.y.z/ folder) - we package them ourselves,
  * so there's no ambiguity to handle here.
  */
-async function ensureJava(javaCfg, commonDir) {
+async function ensureJava(javaCfg, commonDir, onProgress) {
     const entry = javaCfg[platformKey()]
     if (entry == null) {
         throw new Error(`No Java build published for platform '${platformKey()}'`)
@@ -135,7 +147,7 @@ async function ensureJava(javaCfg, commonDir) {
     await fs.ensureDir(javaHome)
     const isZip = entry.url.endsWith('.zip')
     const archivePath = path.join(javaHome, isZip ? 'java.zip' : 'java.tar.gz')
-    await downloadTo(entry.url, archivePath)
+    await downloadTo(entry.url, archivePath, singleFileProgress(path.basename(archivePath), onProgress))
 
     if (entry.sha256) {
         const digest = await sha256File(archivePath)
@@ -193,7 +205,7 @@ function versionJsonPath(commonDir, minecraftVersion, forgeVersion) {
  * duplicated per instance, matching Helios's own convention. Returns the
  * path to the version.json Forge's own installer generates.
  */
-async function ensureForge(forgeCfg, javaPath, instanceDir, commonDir) {
+async function ensureForge(forgeCfg, javaPath, instanceDir, commonDir, onProgress) {
     const { minecraftVersion, forgeVersion } = forgeCfg
     const outJson = versionJsonPath(commonDir, minecraftVersion, forgeVersion)
     const markerPath = path.join(commonDir, `.forge-installed-${minecraftVersion}-${forgeVersion}`)
@@ -208,7 +220,7 @@ async function ensureForge(forgeCfg, javaPath, instanceDir, commonDir) {
     const installerPath = path.join(commonDir, 'forge-installers', `forge-${minecraftVersion}-${forgeVersion}-installer.jar`)
     if (!await fs.pathExists(installerPath)) {
         logger.info(`Downloading Forge ${forgeVersion} installer...`)
-        await downloadTo(forgeCfg.installer.url, installerPath)
+        await downloadTo(forgeCfg.installer.url, installerPath, singleFileProgress(path.basename(installerPath), onProgress))
         if (forgeCfg.installer.sha256) {
             const digest = await sha256File(installerPath)
             if (digest !== forgeCfg.installer.sha256) {
@@ -274,12 +286,19 @@ async function syncFiles(filesCfg, instanceDir, enabledAddons, onProgress) {
     const enabled = new Set(enabledAddons || [])
     const expected = new Set()
 
+    // Pass 1: decide what actually needs downloading (same forced/download/
+    // optional rules as before) without downloading anything yet, so the
+    // total byte count below covers this whole sync - not just one file at
+    // a time. Without this, a run of 74 small mods each flashed 0->100%
+    // independently instead of contributing to one overall percentage.
+    const toDownload = []
     for (const entry of entries) {
+        let localPath
         if (entry.mode === 'optional') {
             const realPath = entry.path.startsWith(ADDONS_PREFIX)
                 ? entry.path.slice(ADDONS_PREFIX.length)
                 : entry.path
-            const localPath = path.join(instanceDir, ...realPath.split('/'))
+            localPath = path.join(instanceDir, ...realPath.split('/'))
 
             if (!enabled.has(realPath)) {
                 if (await fs.pathExists(localPath)) {
@@ -288,37 +307,39 @@ async function syncFiles(filesCfg, instanceDir, enabledAddons, onProgress) {
                 }
                 continue
             }
-
-            expected.add(localPath)
-            let needsDownload = true
-            if (await fs.pathExists(localPath)) {
-                const digest = await sha256File(localPath)
-                needsDownload = digest !== entry.sha256
-            }
-            if (needsDownload) {
-                await downloadTo(entry.url, localPath, onProgress)
-            }
-            continue
+        } else {
+            localPath = path.join(instanceDir, ...entry.path.split('/'))
         }
-
-        const localPath = path.join(instanceDir, ...entry.path.split('/'))
         expected.add(localPath)
 
         if (entry.mode === 'download') {
             if (await fs.pathExists(localPath)) continue
-            await downloadTo(entry.url, localPath, onProgress)
+            toDownload.push({ entry, localPath })
             continue
         }
 
-        // forced
+        // forced, or an enabled optional addon: download if missing or hash mismatch.
         let needsDownload = true
         if (await fs.pathExists(localPath)) {
             const digest = await sha256File(localPath)
             needsDownload = digest !== entry.sha256
         }
         if (needsDownload) {
-            await downloadTo(entry.url, localPath, onProgress)
+            toDownload.push({ entry, localPath })
         }
+    }
+
+    // Pass 2: download, reporting one percentage across the whole batch
+    // (byte-weighted via each entry's known size) instead of per file.
+    const totalBytes = toDownload.reduce((sum, { entry }) => sum + (entry.size || 0), 0)
+    let bytesDone = 0
+    for (const { entry, localPath } of toDownload) {
+        const fileName = entry.path.split('/').pop()
+        await downloadTo(entry.url, localPath, onProgress ? (transferred) => {
+            const percent = totalBytes > 0 ? Math.round(((bytesDone + transferred) / totalBytes) * 100) : 0
+            onProgress({ file: fileName, percent })
+        } : undefined)
+        bytesDone += entry.size || 0
     }
 
     for (const dir of filesCfg.forcedDirectories || []) {

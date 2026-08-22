@@ -24,6 +24,7 @@ const { VENTRYS_SYNC_URL }    = require('./assets/js/ventrysSyncConfig')
 
 // Launch Elements
 const launch_content          = document.getElementById('launch_content')
+const launch_button           = document.getElementById('launch_button')
 const launch_details          = document.getElementById('launch_details')
 const launch_progress         = document.getElementById('launch_progress')
 const launch_progress_label   = document.getElementById('launch_progress_label')
@@ -35,18 +36,31 @@ const loggerLanding = LoggerUtil.getLogger('Landing')
 
 /* Launch Progress Wrapper Functions */
 
+// Holds the server name label while it's swapped out for the "downloading"
+// text below, so toggleLaunchArea(false) can put it back without re-running
+// updateSelectedServer()'s other side effects (config save, tab refresh).
+let preDownloadServerLabel = null
+
 /**
  * Show/hide the loading area.
- * 
+ *
  * @param {boolean} loading True if the loading area should be shown, otherwise false.
  */
 function toggleLaunchArea(loading){
     if(loading){
+        launch_button.disabled = true
+        server_selection_button.disabled = true
+        preDownloadServerLabel = server_selection_button.innerHTML
+        server_selection_button.innerHTML = Lang.queryJS('landing.launchButtonDownloading')
         launch_details.style.display = 'flex'
-        launch_content.style.display = 'none'
     } else {
         launch_details.style.display = 'none'
-        launch_content.style.display = 'inline-flex'
+        server_selection_button.disabled = false
+        if(preDownloadServerLabel !== null){
+            server_selection_button.innerHTML = preDownloadServerLabel
+            preDownloadServerLabel = null
+        }
+        setLaunchEnabled(ConfigManager.getSelectedServer() != null)
     }
 }
 
@@ -86,11 +100,11 @@ function setDownloadPercentage(percent){
  * @param {boolean} val True to enable, false to disable.
  */
 function setLaunchEnabled(val){
-    document.getElementById('launch_button').disabled = !val
+    launch_button.disabled = !val
 }
 
 // Bind launch button
-document.getElementById('launch_button').addEventListener('click', async e => {
+launch_button.addEventListener('click', async e => {
     loggerLanding.info('Launching game..')
     try {
         // Java is no longer a player-facing choice: dlAsync() acquires and
@@ -388,20 +402,27 @@ async function dlAsync(login = true) {
         const instancesRoot = ConfigManager.getInstanceDirectory()
         const instanceDir = ConfigManager.getServerInstanceDirectory(serv.rawServer.id)
 
+        const onDlProgress = ({ file, percent }) => {
+            setLaunchDetails(Lang.queryJS('landing.dlAsync.downloadingFile', { file }))
+            setDownloadPercentage(percent)
+        }
+
         const syncConfig = await ventrysSync.fetchConfig(VENTRYS_SYNC_URL)
-        const javaPath = await ventrysSync.ensureJava(syncConfig.java, commonDir)
+        setDownloadPercentage(0)
+        const javaPath = await ventrysSync.ensureJava(syncConfig.java, commonDir, onDlProgress)
         // ProcessBuilder spawns whatever ConfigManager.getJavaExecutable()
         // holds for this server - it knows nothing about ventrysSync. Without
         // this, the actual launch would silently fall back to a stale or
         // nonexistent value instead of the Java we just ensured is present.
         ConfigManager.setJavaExecutable(serv.rawServer.id, javaPath)
         ConfigManager.save()
+        setDownloadPercentage(0)
         const forgeVersionJsonPath = await ventrysSync.ensureForge(
-            syncConfig.forge, javaPath, instanceDir, commonDir)
+            syncConfig.forge, javaPath, instanceDir, commonDir, onDlProgress)
         const enabledAddons = ConfigManager.getAddonConfiguration(serv.rawServer.id)?.enabled || []
-        await ventrysSync.syncFiles(syncConfig, instanceDir, enabledAddons, percent => {
-            setDownloadPercentage(percent)
-        })
+        setLaunchDetails(Lang.queryJS('landing.dlAsync.downloadingFiles'))
+        setDownloadPercentage(0)
+        await ventrysSync.syncFiles(syncConfig, instanceDir, enabledAddons, onDlProgress)
 
         modLoaderData = await fs.readJson(forgeVersionJsonPath)
         realServ = ventrysSync.buildDistribution({

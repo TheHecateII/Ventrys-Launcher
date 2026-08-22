@@ -3,6 +3,17 @@
 
 /*******************************************************************************
  *                                                                             *
+ * Brand tokens                                                                *
+ *                                                                             *
+ ******************************************************************************/
+
+:root {
+    /* Sampled from assets/images/ventryslogo.png (sun swirl / bronze ring). */
+    --ventrys-gold: #d9a441;
+}
+
+/*******************************************************************************
+ *                                                                             *
  * Fonts                                                                       *
  *                                                                             *
  ******************************************************************************/
@@ -44,6 +55,15 @@ p {
 body, button {
     font-family: 'Avenir Book';
     color: white;
+}
+
+/* body.style.backgroundImage is set/rotated from JS (see uibinder.js) -
+   without these, a source image bigger than the window just gets
+   anchored top-left uncropped instead of scaled/centered to fill it. */
+body {
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-size: cover;
 }
 
 /*body {
@@ -2890,7 +2910,7 @@ input:checked + .toggleSwitchSlider:before {
     top: 0%;
     left: 0%;
     border-radius: 50%;
-    box-shadow: 0 0 15px #43c628;
+    box-shadow: 0 0 15px var(--ventrys-gold);
     animation: glow-grow 4s ease-out infinite;
     background: rgba(0, 0, 0, 0.15);
 }
@@ -3421,7 +3441,7 @@ input:checked + .toggleSwitchSlider:before {
 /* Main launch content container. */
 #landingContainer > #lower > #right #launch_content {
     position: relative;
-    top: 25px;
+    margin-top: 25px;
     display: inline-flex;
 }
 
@@ -3440,7 +3460,7 @@ input:checked + .toggleSwitchSlider:before {
 }
 #launch_button:hover,
 #launch_button:focus {
-    text-shadow: 0px 0px 20px #fff, 0px 0px 20px #fff;
+    text-shadow: 0px 0px 20px var(--ventrys-gold), 0px 0px 20px var(--ventrys-gold);
 }
 #launch_button:active {
     color: #c7c7c7;
@@ -3452,10 +3472,17 @@ input:checked + .toggleSwitchSlider:before {
     pointer-events: none;
 }
 
-/* Launch details main container, hidden until launch processing begins. */
+/* Launch details main container, hidden until launch processing begins.
+   Renders as a second row below #launch_content (which stays visible,
+   showing a "downloading" label instead of JOUER) rather than replacing
+   it in place. Uses margin, not top: relative positioning's `top` shifts
+   an element visually without reserving that space in the flow, so a
+   `top` offset here was rendering on top of launch_content instead of
+   below it - margin actually pushes this row down from launch_content's
+   real (reserved) height. */
 #launch_details {
     position: relative;
-    top: 25px;
+    margin-top: 10px;
     display: none;
 }
  
@@ -3494,7 +3521,7 @@ input:checked + .toggleSwitchSlider:before {
 }
 #server_selection_button:hover,
 #server_selection_button:focus {
-    text-shadow: 0px 0px 20px #fff, 0px 0px 20px #fff, 0px 0px 20px #fff;
+    text-shadow: 0px 0px 20px var(--ventrys-gold), 0px 0px 20px var(--ventrys-gold), 0px 0px 20px var(--ventrys-gold);
 }
 #server_selection_button:active {
     color: #c7c7c7;
@@ -3511,7 +3538,7 @@ input:checked + .toggleSwitchSlider:before {
     background-color: transparent;
 }
 #launch_progress[value]::-webkit-progress-value {
-    background-color: #fff;
+    background-color: var(--ventrys-gold);
 }
 
 /* Span which displays information about the status of the launch process. */

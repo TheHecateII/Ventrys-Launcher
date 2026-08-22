@@ -9,6 +9,12 @@ const { Type }      = require('helios-distribution-types')
 const AuthManager   = require('./assets/js/authmanager')
 const ConfigManager = require('./assets/js/configmanager')
 const { DistroAPI } = require('./assets/js/distromanager')
+// Named distinctly from landing.js's own `ventrysSync`/`VENTRYS_SYNC_URL` -
+// classic <script> tags share one global scope, and redeclaring the same
+// const name across two of them is a SyntaxError that breaks every script
+// on the page (bit us once already this session).
+const ventrysSyncBg = require('./assets/js/ventrysSync')
+const { VENTRYS_SYNC_URL: BACKGROUND_SYNC_URL } = require('./assets/js/ventrysSyncConfig')
 
 const loggerUIBinder = LoggerUtil.getLogger('UIBinder')
 
@@ -67,6 +73,60 @@ function getCurrentView(){
     return currentView
 }
 
+const BACKGROUND_ROTATE_MS = 12000
+
+/**
+ * Preloads an image before it's used as a background - setting
+ * backgroundImage to a URL that hasn't finished downloading yet risks a
+ * blank/flash frame while it loads.
+ */
+function preloadImage(url){
+    return new Promise((resolve, reject) => {
+        const img = new Image()
+        img.onload = () => resolve()
+        img.onerror = () => reject(new Error(`Failed to load ${url}`))
+        img.src = url
+    })
+}
+
+/**
+ * Rotates the launcher's background through whatever ventrys-sync exposes
+ * under backgrounds/ (see /config.json's "backgrounds" list), every
+ * BACKGROUND_ROTATE_MS. Entirely optional: if the server is unreachable or
+ * hasn't got any backgrounds configured, this just leaves the static local
+ * fondventrys.jpg already set in revealLauncherUI() alone - never blocks
+ * startup or shows an error over a purely cosmetic feature.
+ */
+async function startBackgroundSlideshow(){
+    let backgrounds
+    try {
+        const config = await ventrysSyncBg.fetchConfig(BACKGROUND_SYNC_URL)
+        backgrounds = config.backgrounds
+    } catch (err) {
+        loggerUIBinder.warn('Unable to fetch background list, keeping the default background.', err)
+        return
+    }
+
+    if(backgrounds == null || backgrounds.length === 0){
+        return
+    }
+
+    let index = 0
+    const showNext = async () => {
+        const bg = backgrounds[index % backgrounds.length]
+        index++
+        try {
+            await preloadImage(bg.url)
+            document.body.style.backgroundImage = `url('${bg.url}')`
+        } catch (err) {
+            loggerUIBinder.warn(`Skipping background ${bg.url}:`, err)
+        }
+    }
+
+    await showNext()
+    setInterval(showNext, BACKGROUND_ROTATE_MS)
+}
+
 function revealLauncherUI() {
     if(!isDev){
         const { AUTO_UPDATES_ENABLED } = require('./assets/js/ipcconstants')
@@ -78,6 +138,7 @@ function revealLauncherUI() {
 
     document.getElementById('frameBar').style.backgroundColor = 'rgba(0, 0, 0, 0.5)'
     document.body.style.backgroundImage = `url('assets/images/backgrounds/fondventrys.jpg')`
+    startBackgroundSlideshow()
     $('#main').show()
 
     const isLoggedIn = Object.keys(ConfigManager.getAuthAccounts()).length > 0

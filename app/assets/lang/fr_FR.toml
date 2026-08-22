@@ -156,6 +156,10 @@ server = "SERVEUR"
 offline = "HORS LIGNE"
 players = "JOUEURS"
 
+[js.landing]
+launchButton = "JOUER"
+launchButtonDownloading = "Téléchargement en cours"
+
 [js.landing.dlAsync]
 loadingServerInfo = "Chargement des informations du serveur.."
 fatalError = "Erreur fatale"
@@ -166,6 +170,7 @@ seeConsoleForDetails = "Consultez la console (CTRL + Shift + i) pour plus de dé
 validatingFileIntegrity = "Validation de l'intégrité des fichiers.."
 errorDuringFileVerificationTitle = "Erreur lors de la vérification des fichiers"
 downloadingFiles = "Téléchargement des fichiers.."
+downloadingFile = "{file}"
 errorDuringFileDownloadTitle = "Erreur lors du téléchargement"
 preparingToLaunch = "Préparation du lancement.."
 launchingGame = "Lancement du jeu.."
