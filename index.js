@@ -268,6 +268,12 @@ function createWindow() {
     win = new BrowserWindow({
         width: 980,
         height: 552,
+        // The UI is laid out with fixed pixel values throughout (icon
+        // sizes, offsets, etc.), not a fluid grid - resizing/maximizing
+        // overflows it (horizontal scrollbar, clipped rows) rather than
+        // reflowing cleanly.
+        resizable: false,
+        maximizable: false,
         icon: getPlatformIcon('ventryslogo'),
         frame: false,
         webPreferences: {
@@ -294,8 +300,6 @@ function createWindow() {
     })*/
 
     win.removeMenu()
-
-    win.resizable = true
 
     win.on('closed', () => {
         win = null

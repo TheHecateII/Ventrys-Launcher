@@ -93,9 +93,9 @@ function preloadImage(url){
  * Rotates the launcher's background through whatever ventrys-sync exposes
  * under backgrounds/ (see /config.json's "backgrounds" list), every
  * BACKGROUND_ROTATE_MS. Entirely optional: if the server is unreachable or
- * hasn't got any backgrounds configured, this just leaves the static local
- * fondventrys.jpg already set in revealLauncherUI() alone - never blocks
- * startup or shows an error over a purely cosmetic feature.
+ * hasn't got any backgrounds configured, this just leaves the window's own
+ * backgroundColor (see index.js) showing - never blocks startup or shows
+ * an error over a purely cosmetic feature.
  */
 async function startBackgroundSlideshow(){
     let backgrounds
@@ -137,7 +137,10 @@ function revealLauncherUI() {
     }
 
     document.getElementById('frameBar').style.backgroundColor = 'rgba(0, 0, 0, 0.5)'
-    document.body.style.backgroundImage = `url('assets/images/backgrounds/fondventrys.jpg')`
+    // No bundled local default anymore - the wolf image moved to
+    // ventrys-sync's backgrounds/ folder, served through the same
+    // slideshow as everything else. Until it loads, the window's own
+    // backgroundColor ('#171614', see index.js) shows through.
     startBackgroundSlideshow()
     $('#main').show()
 
