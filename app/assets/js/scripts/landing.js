@@ -407,7 +407,7 @@ async function dlAsync(login = true) {
             setDownloadPercentage(percent)
         }
 
-        const syncConfig = await ventrysSync.fetchConfig(VENTRYS_SYNC_URL)
+        const syncConfig = await ventrysSync.fetchConfig(VENTRYS_SYNC_URL, ConfigManager.getSelectedAccount()?.uuid)
         setDownloadPercentage(0)
         const javaPath = await ventrysSync.ensureJava(syncConfig.java, commonDir, onDlProgress)
         // ProcessBuilder spawns whatever ConfigManager.getJavaExecutable()

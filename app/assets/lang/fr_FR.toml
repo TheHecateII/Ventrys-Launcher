@@ -218,6 +218,7 @@ logout = "Déconnexion"
 
 [js.settings.addons]
 noAddons = "Aucun addon disponible pour ce serveur."
+addonsAdminHeader = "Addons Admin"
 
 [js.settings.serverListing]
 mainServer = "Serveur principal"

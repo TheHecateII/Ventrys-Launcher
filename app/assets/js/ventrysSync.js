@@ -40,8 +40,13 @@ function isRetryableError(error) {
 
 // ---------- config fetch ----------
 
-async function fetchConfig(baseUrl) {
-    const res = await got(`${baseUrl}/config.json`, { responseType: 'json', timeout: { request: 30000 } })
+// `uuid` (the selected account's Minecraft/Microsoft uuid) lets the backend
+// decide whether to include "admin" mode addons (staff-only, see
+// ventrys-sync's app/rules.py + app/access.py) in `entries` at all - omitted
+// entirely for everyone else, not just hidden client-side.
+async function fetchConfig(baseUrl, uuid) {
+    const url = uuid ? `${baseUrl}/config.json?uuid=${encodeURIComponent(uuid)}` : `${baseUrl}/config.json`
+    const res = await got(url, { responseType: 'json', timeout: { request: 30000 } })
     return res.body
 }
 
@@ -270,13 +275,16 @@ const ADDONS_PREFIX = 'addons/'
  *  - download: download only if completely absent - never touched again,
  *    intentionally (lets admins seed a default without ever overwriting a
  *    player's own edits).
- *  - optional (addons/<realPath>): never auto-downloaded. Synced to its real
- *    target (addons/mods/Cool.jar -> mods/Cool.jar) only if `realPath` is in
- *    `enabledAddons`, and actively removed from that real target otherwise -
- *    e.g. a mod the player just disabled. Its real path is also added to
- *    `expected` so the forced-content prune pass below (which shares the
- *    same real folders, like mods/) never mistakes an enabled addon for an
- *    orphan.
+ *  - optional/admin (addons/<realPath>): never auto-downloaded. Synced to its
+ *    real target (addons/mods/Cool.jar -> mods/Cool.jar) only if `realPath`
+ *    is in `enabledAddons`, and actively removed from that real target
+ *    otherwise - e.g. a mod the player just disabled. Its real path is also
+ *    added to `expected` so the forced-content prune pass below (which
+ *    shares the same real folders, like mods/) never mistakes an enabled
+ *    addon for an orphan. "admin" behaves identically here - the backend has
+ *    already stripped these entries out of `filesCfg.entries` entirely for
+ *    a non-staff account, so by the time syncFiles sees one, whoever is
+ *    running this launcher was already allowed to have it.
  * Then, for every folder listed in forcedDirectories, deletes any local
  * file that isn't in `expected` - the generalized version of the old
  * pruneOrphans patch, minus the whitelist limitation.
@@ -294,7 +302,7 @@ async function syncFiles(filesCfg, instanceDir, enabledAddons, onProgress) {
     const toDownload = []
     for (const entry of entries) {
         let localPath
-        if (entry.mode === 'optional') {
+        if (entry.mode === 'optional' || entry.mode === 'admin') {
             const realPath = entry.path.startsWith(ADDONS_PREFIX)
                 ? entry.path.slice(ADDONS_PREFIX.length)
                 : entry.path

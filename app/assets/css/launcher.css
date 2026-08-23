@@ -1724,6 +1724,16 @@ input:checked + .toggleSwitchSlider:before {
     margin-bottom: 10px;
 }
 
+/* Section-level header above the staff-only addon groups - a top border on
+   top of .settingsModsHeader's own bottom border, so it reads as a divider
+   between the regular addons and the admin-only ones instead of just
+   another folder subheader at the same level. */
+.settingsAddonsAdminHeader {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255, 255, 255, 0.5);
+}
+
 /* Mod elements sub-containers. */
 #settingsReqModsContainer,
 #settingsOptModsContainer,
@@ -2510,7 +2520,6 @@ input:checked + .toggleSwitchSlider:before {
 #landingContainer > #lower {
     height: 23%;
     display: flex;
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0));
 }
 #landingContainer > #lower > #left {
     position: relative;

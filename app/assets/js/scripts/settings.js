@@ -759,9 +759,13 @@ function animateSettingsTabRefresh(){
  * carries any module data - see distromanager.js) - fetches the ventrys-sync
  * backend directly. An "addon" is any entry the backend resolves to mode
  * "optional" (everything under an addons/ folder by convention, see
- * app/rules.py in the ventrys-sync repo). Its real target path
- * (addons/mods/Cool.jar -> mods/Cool.jar) is used both as the DOM join key
- * (`formod`) and as the value persisted via ConfigManager - actual
+ * app/rules.py in the ventrys-sync repo) or "admin" (same, but an admin
+ * explicitly opted a specific addon into a staff-only tier - gated by a
+ * UUID whitelist server-side, see app/access.py; entries the signed-in
+ * account isn't whitelisted for are simply absent from config.json, so
+ * that half of the UI never renders for a regular player). Its real target
+ * path (addons/mods/Cool.jar -> mods/Cool.jar) is used both as the DOM join
+ * key (`formod`) and as the value persisted via ConfigManager - actual
  * download/removal only happens during the next sync (ventrysSync.syncFiles),
  * not from here.
  */
@@ -784,29 +788,53 @@ async function resolveAddonsForUI(){
     const servConf = ConfigManager.getAddonConfiguration(serv)
     const enabled = new Set(servConf != null ? servConf.enabled : [])
 
-    let entries = []
+    let optionalEntries = []
+    let adminEntries = []
     try {
-        const syncConfig = await ventrysSync.fetchConfig(VENTRYS_SYNC_URL)
-        entries = (syncConfig.entries || []).filter(e => e.mode === 'optional' && e.path.startsWith(ADDONS_ENTRY_PREFIX))
+        const uuid = ConfigManager.getSelectedAccount()?.uuid
+        const syncConfig = await ventrysSync.fetchConfig(VENTRYS_SYNC_URL, uuid)
+        const addonEntries = (syncConfig.entries || []).filter(e => e.path.startsWith(ADDONS_ENTRY_PREFIX))
+        optionalEntries = addonEntries.filter(e => e.mode === 'optional')
+        adminEntries = addonEntries.filter(e => e.mode === 'admin')
     } catch (err) {
         loggerSettingsAddons.warn('Unable to fetch addon list.', err)
     }
 
-    document.getElementById('settingsAddonsContent').innerHTML = parseAddonsForUI(entries, enabled)
+    document.getElementById('settingsAddonsContent').innerHTML = parseAddonsForUI(optionalEntries, adminEntries, enabled)
 }
 
 /**
- * Build the addon UI, grouped by the folder the addon actually lives in
- * once installed (mods/, shaderpacks/, ...).
+ * Build the addon UI: the regular addon groups first, then - only if the
+ * account is whitelisted server-side for at least one of them, since
+ * that's the only way `adminEntries` is ever non-empty - a second,
+ * visually separated "Addons Admin" section using the exact same grouping/
+ * toggle machinery.
  *
- * @param {Object[]} entries Flat list of "optional" mode entries from config.json.
+ * @param {Object[]} optionalEntries Flat list of "optional" mode entries from config.json.
+ * @param {Object[]} adminEntries Flat list of "admin" mode entries from config.json.
  * @param {Set<string>} enabled Real target paths currently enabled for this server.
  */
-function parseAddonsForUI(entries, enabled){
-    if(entries.length === 0){
+function parseAddonsForUI(optionalEntries, adminEntries, enabled){
+    if(optionalEntries.length === 0 && adminEntries.length === 0){
         return `<div id="settingsAddonsEmpty">${Lang.queryJS('settings.noAddons')}</div>`
     }
 
+    let html = renderAddonGroups(optionalEntries, enabled)
+    if(adminEntries.length > 0){
+        html += `<div class="settingsModsHeader settingsAddonsAdminHeader">${Lang.queryJS('settings.addons.addonsAdminHeader')}</div>`
+        html += renderAddonGroups(adminEntries, enabled)
+    }
+    return html
+}
+
+/**
+ * Group a flat list of addon entries by the folder they install into
+ * (mods/, shaderpacks/, ...) and render each as its own toggle list.
+ *
+ * @param {Object[]} entries Flat list of addon entries from config.json.
+ * @param {Set<string>} enabled Real target paths currently enabled for this server.
+ */
+function renderAddonGroups(entries, enabled){
     const groups = {}
     for(const entry of entries){
         const realPath = entry.path.slice(ADDONS_ENTRY_PREFIX.length)

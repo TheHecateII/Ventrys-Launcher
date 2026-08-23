@@ -219,6 +219,7 @@ logout = "Log Out"
 
 [js.settings.addons]
 noAddons = "No addons available for this server."
+addonsAdminHeader = "Addons Admin"
 
 [js.settings.serverListing]
 mainServer = "Main Server"
