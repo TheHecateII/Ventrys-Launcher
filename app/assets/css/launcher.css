@@ -3481,17 +3481,13 @@ input:checked + .toggleSwitchSlider:before {
     pointer-events: none;
 }
 
-/* Launch details main container, hidden until launch processing begins.
-   Renders as a second row below #launch_content (which stays visible,
-   showing a "downloading" label instead of JOUER) rather than replacing
-   it in place. Uses margin, not top: relative positioning's `top` shifts
-   an element visually without reserving that space in the flow, so a
-   `top` offset here was rendering on top of launch_content instead of
-   below it - margin actually pushes this row down from launch_content's
-   real (reserved) height. */
+/* Launch details main container, hidden until launch processing begins -
+   takes #launch_content's exact slot (same margin-top) rather than adding
+   a row below it, since toggleLaunchArea() hides #launch_content while
+   this is shown and vice versa; never both at once. */
 #launch_details {
     position: relative;
-    margin-top: 10px;
+    margin-top: 25px;
     display: none;
 }
  

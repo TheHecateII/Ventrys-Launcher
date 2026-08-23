@@ -36,13 +36,11 @@ const loggerLanding = LoggerUtil.getLogger('Landing')
 
 /* Launch Progress Wrapper Functions */
 
-// Holds the server name label while it's swapped out for the "downloading"
-// text below, so toggleLaunchArea(false) can put it back without re-running
-// updateSelectedServer()'s other side effects (config save, tab refresh).
-let preDownloadServerLabel = null
-
 /**
- * Show/hide the loading area.
+ * Show/hide the loading area. launch_content (the JOUER button + server
+ * label) and launch_details (the progress bar) occupy the same slot -
+ * exactly one of them is visible at a time, so the progress bar replaces
+ * the button instead of appearing as an extra row underneath it.
  *
  * @param {boolean} loading True if the loading area should be shown, otherwise false.
  */
@@ -50,16 +48,12 @@ function toggleLaunchArea(loading){
     if(loading){
         launch_button.disabled = true
         server_selection_button.disabled = true
-        preDownloadServerLabel = server_selection_button.innerHTML
-        server_selection_button.innerHTML = Lang.queryJS('landing.launchButtonDownloading')
+        launch_content.style.display = 'none'
         launch_details.style.display = 'flex'
     } else {
         launch_details.style.display = 'none'
+        launch_content.style.display = 'inline-flex'
         server_selection_button.disabled = false
-        if(preDownloadServerLabel !== null){
-            server_selection_button.innerHTML = preDownloadServerLabel
-            preDownloadServerLabel = null
-        }
         setLaunchEnabled(ConfigManager.getSelectedServer() != null)
     }
 }
