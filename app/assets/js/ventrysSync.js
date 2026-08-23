@@ -124,6 +124,30 @@ function javaExecutableIn(javaHome) {
 }
 
 /**
+ * Recursively strips the com.apple.quarantine extended attribute macOS sets
+ * on files that came from a downloaded archive. Without this, Gatekeeper
+ * blocks execution of the extracted java binary/dylibs with a misleading
+ * "is damaged and can't be opened" error - the files aren't corrupt, they're
+ * just quarantined/not notarized. `xattr -d` on an attribute that isn't
+ * present exits non-zero on some macOS versions, so failure here is not fatal.
+ */
+function clearQuarantine(dirPath) {
+    return new Promise((resolve) => {
+        const proc = spawn('xattr', ['-cr', dirPath])
+        proc.on('error', (err) => {
+            logger.warn(`xattr not available to clear quarantine on ${dirPath}: ${err.message}`)
+            resolve()
+        })
+        proc.on('close', (code) => {
+            if (code !== 0) {
+                logger.warn(`xattr -cr exited with code ${code} for ${dirPath} (non-fatal)`)
+            }
+            resolve()
+        })
+    })
+}
+
+/**
  * Downloads + extracts the Java build for this OS into
  * commonDir/java/<version>/ if not already present, and returns the java
  * executable path. Our zips are expected to be flat (bin/, lib/, etc. at
@@ -170,6 +194,12 @@ async function ensureJava(javaCfg, commonDir, onProgress) {
 
     if (!await fs.pathExists(exePath)) {
         throw new Error(`Java extraction didn't produce ${exePath} - archive layout unexpected.`)
+    }
+    if (process.platform === 'darwin') {
+        // Fichiers passes par un zip telecharge = attribut de quarantaine macOS.
+        // Sans ca, Gatekeeper refuse d'executer java/les .dylib en disant "endommage"
+        // (message trompeur - le binaire n'est pas casse, juste en quarantaine/pas notarise).
+        await clearQuarantine(javaHome)
     }
     if (process.platform !== 'win32') {
         await fs.chmod(exePath, 0o755)
