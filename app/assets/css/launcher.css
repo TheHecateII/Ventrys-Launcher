@@ -2890,6 +2890,16 @@ input:checked + .toggleSwitchSlider:before {
 * Landing View (Top Styles) | Left Content
 * * */
 
+/* Vertically stacks + horizontally centers the logo and the news button
+   below it. #left itself is a row flex container (justify-content:
+   flex-end, right-aligns its one child against #content) - this wrapper
+   is that one child, so #left's own layout is untouched. */
+#leftIconStack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
 /* Logo image. */
 #image_seal {
     height: 70px;
@@ -2976,6 +2986,212 @@ input:checked + .toggleSwitchSlider:before {
         transform: scale(1.5);
         opacity: 0;
     }
+}
+
+/* News button, below the logo. Same "something needs attention" visual
+   language as #image_seal_container[update] above (reuses glow-grow) but
+   on its own small button instead of the logo. */
+#newsButtonContainer {
+    position: relative;
+    height: 34px;
+    width: 34px;
+    margin-top: 14px;
+}
+#newsButton {
+    background: rgba(0, 0, 0, 0.25);
+    border: none;
+    border-radius: 50%;
+    height: 100%;
+    width: 100%;
+    padding: 7px;
+    box-sizing: border-box;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.75);
+    transition: color 0.25s ease, background-color 0.25s ease;
+}
+#newsButton:hover,
+#newsButton:focus {
+    color: #fff;
+    background: rgba(0, 0, 0, 0.4);
+    outline: none;
+}
+#newsSVG {
+    height: 100%;
+    width: 100%;
+    fill: none;
+    stroke: currentColor;
+}
+
+/* News button styles w/ unread news. */
+#newsButtonContainer[unread]:before,
+#newsButtonContainer[unread]:after {
+    /* Purely decorative - sits on top of the real <button> in paint order
+       (::after always paints after DOM children), which without this
+       would swallow real mouse clicks meant for the button underneath
+       (unlike #image_seal_container's own glow, whose click handler is
+       on the container itself rather than a child element). */
+    pointer-events: none;
+    cursor: pointer;
+    position: absolute;
+    content: '';
+    height: 100%;
+    width: 100%;
+    top: 0%;
+    left: 0%;
+    border-radius: 50%;
+    box-shadow: 0 0 12px var(--ventrys-gold);
+    animation: glow-grow 4s ease-out infinite;
+    background: rgba(0, 0, 0, 0.15);
+}
+#newsButtonContainer[unread]:before {
+    animation-delay: 2s;
+}
+
+/* News unread tooltip - same layout as #updateAvailableTooltip. */
+#newsUnreadTooltip {
+    cursor: pointer;
+    visibility: hidden;
+    opacity: 0;
+    width: 100px;
+    height: 15px;
+    background-color: rgb(0, 0, 0);
+    color: #fff;
+    text-align: center;
+    border-radius: 4px;
+    padding: 2px;
+    position: absolute;
+    z-index: 1;
+    top: 115%;
+    left: -33px;
+    font-family: 'Avenir Medium';
+    font-size: 12px;
+    transition: visibility 0s linear 0.25s, opacity 0.25s ease;
+}
+#newsUnreadTooltip::after {
+    content: " ";
+    position: absolute;
+    left: 50%;
+    bottom: 100%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: transparent transparent rgb(0, 0, 0) transparent;
+}
+#newsButtonContainer[unread]:hover #newsUnreadTooltip {
+    visibility: visible;
+    opacity: 1;
+    transition-delay: 0s;
+}
+
+/* * *
+* News Panel (news.ejs)
+* * */
+
+#newsPanelContainer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 100%;
+    z-index: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.4);
+}
+#newsPanel {
+    position: relative;
+    width: 520px;
+    max-width: 80%;
+    max-height: 75%;
+    display: flex;
+    flex-direction: column;
+    background: rgba(20, 20, 20, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    box-sizing: border-box;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+#newsPanelHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    flex-shrink: 0;
+}
+#newsPanelTitle {
+    font-family: 'Avenir Medium';
+    font-size: 16px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    color: var(--ventrys-gold);
+}
+#newsPanelClose {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0px 4px;
+    transition: color 0.25s ease;
+}
+#newsPanelClose:hover,
+#newsPanelClose:focus {
+    color: #fff;
+    outline: none;
+}
+#newsPanelBody {
+    overflow-y: auto;
+    padding: 18px 22px;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 13px;
+    line-height: 1.6;
+    -webkit-user-select: initial;
+}
+#newsPanelEmpty {
+    color: rgba(255, 255, 255, 0.5);
+    text-align: center;
+    padding: 20px 0px;
+}
+#newsPanelContent h1,
+#newsPanelContent h2,
+#newsPanelContent h3 {
+    color: var(--ventrys-gold);
+    margin: 0.6em 0px 0.3em;
+}
+#newsPanelContent h1:first-child,
+#newsPanelContent h2:first-child,
+#newsPanelContent h3:first-child {
+    margin-top: 0px;
+}
+#newsPanelContent p {
+    margin: 0.5em 0px;
+}
+#newsPanelContent ul,
+#newsPanelContent ol {
+    margin: 0.5em 0px;
+    padding-left: 1.4em;
+}
+#newsPanelContent a {
+    color: var(--ventrys-gold);
+}
+#newsPanelContent code {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-family: var(--font-mono, monospace);
+}
+#newsPanelContent pre {
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 4px;
+    padding: 10px 12px;
+    overflow-x: auto;
+}
+#newsPanelContent pre code {
+    background: none;
+    padding: 0px;
 }
 
 /* * *

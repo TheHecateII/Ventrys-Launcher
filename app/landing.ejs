@@ -1,9 +1,21 @@
 <div id="landingContainer" style="display: none;">
     <div id="upper">
         <div id="left">
-            <div id="image_seal_container">
-                <img id="image_seal" src="assets/images/ventryslogo.png"/>
-                <div id="updateAvailableTooltip"><%- lang('landing.updateAvailableTooltip') %></div>
+            <div id="leftIconStack">
+                <div id="image_seal_container">
+                    <img id="image_seal" src="assets/images/ventryslogo.png"/>
+                    <div id="updateAvailableTooltip"><%- lang('landing.updateAvailableTooltip') %></div>
+                </div>
+                <div id="newsButtonContainer">
+                    <button id="newsButton">
+                        <svg id="newsSVG" viewBox="0 0 24 24">
+                            <path d="M4 4 h13 a2 2 0 0 1 2 2 v11 a3 3 0 0 1 -3 3 h-12 a3 3 0 0 1 -3 -3 v-11 a2 2 0 0 1 2 -2 z" fill="none" stroke-width="1.6"/>
+                            <path d="M19 8 h1 a2 2 0 0 1 2 2 v7 a2 2 0 0 1 -2 2 h-1" fill="none" stroke-width="1.6"/>
+                            <path d="M7 8 h9 M7 12 h9 M7 16 h5" stroke-width="1.6" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <div id="newsUnreadTooltip"><%- lang('landing.newsUnreadTooltip') %></div>
+                </div>
             </div>
         </div>
         <div id="content">

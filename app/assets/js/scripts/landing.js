@@ -21,6 +21,7 @@ const ProcessBuilder          = require('./assets/js/processbuilder')
 const { ensureDefaultServerList } = require('./assets/js/serverlistutil')
 const ventrysSync              = require('./assets/js/ventrysSync')
 const { VENTRYS_SYNC_URL }    = require('./assets/js/ventrysSyncConfig')
+const newsManager              = require('./assets/js/newsManager')
 
 // Launch Elements
 const launch_content          = document.getElementById('launch_content')
@@ -31,6 +32,10 @@ const launch_progress_label   = document.getElementById('launch_progress_label')
 const launch_details_text     = document.getElementById('launch_details_text')
 const server_selection_button = document.getElementById('server_selection_button')
 const user_text               = document.getElementById('user_text')
+
+// News Elements
+const newsButtonContainer     = document.getElementById('newsButtonContainer')
+const newsButton              = document.getElementById('newsButton')
 
 const loggerLanding = LoggerUtil.getLogger('Landing')
 
@@ -251,6 +256,48 @@ refreshMojangStatuses()
 let mojangStatusListener = setInterval(() => refreshMojangStatuses(true), 60*60*1000)
 // Set refresh rate to once every 5 minutes.
 let serverStatusListener = setInterval(() => refreshServerStatus(true), 300000)
+
+/* News */
+
+// Raw markdown + its hash from the last successful /news.json fetch, kept
+// in memory so clicking the button doesn't need a second network round
+// trip - refreshNews() already has it.
+let newsContentCache = null
+let newsHash = null
+
+/**
+ * Check ventrys-sync for news, independent of login/server-selection state
+ * (same idea as refreshMojangStatuses above) - so the unread indicator is
+ * already correct by the time the player sees the landing view.
+ */
+async function refreshNews(){
+    let news
+    try {
+        news = await newsManager.fetchNews(VENTRYS_SYNC_URL)
+    } catch (err) {
+        loggerLanding.warn('Unable to fetch news.', err)
+        return
+    }
+    newsContentCache = news.content
+    newsHash = news.hash
+
+    const hasContent = news.content != null && news.content.trim().length > 0
+    const seen = ConfigManager.getNewsCache()
+    if(hasContent && (seen.date !== news.hash || !seen.dismissed)){
+        newsButtonContainer.setAttribute('unread', true)
+    }
+}
+refreshNews()
+
+newsButton.addEventListener('click', () => {
+    renderNewsContent(newsContentCache)
+    toggleNewsPanel(true)
+    newsButtonContainer.removeAttribute('unread')
+    if(newsHash != null){
+        ConfigManager.setNewsCache({ date: newsHash, content: null, dismissed: true })
+        ConfigManager.save()
+    }
+})
 
 /**
  * Shows an error overlay, toggles off the launch area.

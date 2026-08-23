@@ -1,5 +1,8 @@
 [ejs.landing]
 updateAvailableTooltip = "Update Available"
+newsUnreadTooltip = "New news"
+newsPanelTitle = "News"
+newsPanelEmpty = "Nothing new for now."
 usernamePlaceholder = "Username"
 usernameEditButton = "Edit"
 settingsTooltip = "Settings"
