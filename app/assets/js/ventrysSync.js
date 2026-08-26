@@ -60,29 +60,65 @@ async function downloadTo(url, destPath, onProgress) {
 
     let retryCount = 0
     for (;;) {
+        // Resume from wherever the previous attempt left off instead of
+        // re-downloading the whole file - on a flaky connection, always
+        // restarting from 0 can mean a large file never finishes within
+        // MAX_DOWNLOAD_RETRIES even though most of it landed fine each time.
+        let resumeFrom = 0
         try {
+            resumeFrom = (await fs.stat(tmp)).size
+        } catch {
+            resumeFrom = 0
+        }
+
+        try {
+            let rangeRejected = false
             await new Promise((resolve, reject) => {
-                const stream = got.stream(url, { timeout: { request: 120000 } })
-                const out = fs.createWriteStream(tmp)
+                const options = { timeout: { request: 120000 } }
+                if (resumeFrom > 0) {
+                    options.headers = { Range: `bytes=${resumeFrom}-` }
+                }
+                const stream = got.stream(url, options)
+                const out = fs.createWriteStream(tmp, resumeFrom > 0 ? { flags: 'a' } : undefined)
+                if (resumeFrom > 0) {
+                    stream.on('response', res => {
+                        // Server didn't honor the range (ignored it, or our
+                        // partial file is stale/mismatched) - our on-disk
+                        // bytes no longer line up with what's coming next.
+                        // Bail out now (destroy() alone won't reliably fire
+                        // 'error'/'finish' below) and let the retry loop
+                        // start clean.
+                        if (res.statusCode !== 206) {
+                            rangeRejected = true
+                            stream.destroy()
+                            out.destroy()
+                            resolve()
+                        }
+                    })
+                }
                 if (onProgress) {
                     // Raw byte counts, not a 0-100 percent: callers downloading
                     // several files (syncFiles) need transferred/total to weigh
                     // this file into an overall percentage, not just this file's.
-                    stream.on('downloadProgress', p => onProgress(p.transferred, p.total))
+                    // Offset by what was already on disk before this attempt.
+                    stream.on('downloadProgress', p => onProgress(resumeFrom + p.transferred, resumeFrom + p.total))
                 }
                 stream.on('error', reject)
                 out.on('error', reject)
                 out.on('finish', resolve)
                 stream.pipe(out)
             })
+            if (rangeRejected) {
+                await fs.remove(tmp)
+                continue
+            }
             break
         } catch (err) {
             retryCount++
             if (retryCount > MAX_DOWNLOAD_RETRIES || !isRetryableError(err)) {
                 throw err
             }
-            logger.warn(`Download of ${url} failed (${err.code || err.name}), retry ${retryCount}/${MAX_DOWNLOAD_RETRIES}...`)
-            if (onProgress) onProgress(0, 0)
+            logger.warn(`Download of ${url} failed (${err.code || err.name}), retry ${retryCount}/${MAX_DOWNLOAD_RETRIES} (will resume from whatever landed on disk)...`)
             await sleep(1000)
         }
     }
@@ -483,5 +519,6 @@ module.exports = {
     ensureForge,
     syncFiles,
     buildDistribution,
-    versionJsonPath
+    versionJsonPath,
+    downloadTo
 }
